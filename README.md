@@ -1,4 +1,4 @@
-# MEP Planner v2.9
+# MEP Planner
 
 MEP Planner is a Docker-based dashboard designed to manage software release operations (MEP - *Mise En Production*) from Redmine.
 
