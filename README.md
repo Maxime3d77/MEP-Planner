@@ -1,40 +1,54 @@
 # MEP Planner v2.9
 
-MEP Planner est un tableau de bord Docker pour piloter les mises en production enregistrées dans Redmine. Il centralise le planning, les priorités, les communications email, leur traçabilité et les fiches PDF.
+MEP Planner is a Docker-based dashboard designed to manage software release operations (MEP - *Mise En Production*) from Redmine.
 
-## Fonctionnalités
+It provides release planning, calendar visualization, email communications, PDF generation, tracking, and company branding in a modern web interface.
 
-- synchronisation Redmine en arrière-plan ;
-- sélection des tickets par champ personnalisé `Tag=MEP` ;
-- vues Jour, Semaine et Mois ;
-- affichage séparé des MEP sans horaire ;
-- hiérarchie Bas/Normal, Haut, Urgent et Immédiat ;
-- historique SQLite des emails et anti-doublon ;
-- renvoi manuel global ou ciblé ;
-- pièces jointes PDF ;
-- branding MEP Planner + logo entreprise facultatif ;
-- menu Paramètres pour personnaliser l'entreprise ;
-- sauvegarde persistante dans un volume Docker ;
-- thème clair adouci avec champs, recherche et listes déroulantes cohérents ;
-- traduction complète de l’interface française et anglaise ;
-- langue des emails et PDF configurable séparément dans Paramètres.
+---
 
-## Architecture
+# Features
 
-- frontend statique JavaScript servi par nginx ;
-- API FastAPI ;
-- Redmine via son API REST ;
-- SQLite dans `/app/data` ;
-- nginx en reverse proxy sur le port `8080`.
+- Background Redmine synchronization
+- Filter issues using a custom field (`Tag=MEP`)
+- Day / Week / Month calendar views
+- Dedicated area for releases without scheduled time
+- Priority management (Low, Normal, High, Urgent, Immediate)
+- SQLite communication history
+- Automatic email deduplication
+- Manual resend (global or custom recipients)
+- Professional PDF generation
+- MEP Planner branding with optional company logo
+- Company customization through the Settings page
+- Persistent Docker storage
+- Light and Dark themes
+- Complete French / English localization
+- Independent language selection for emails and PDF reports
+- GitHub version checking
+- Secure administrator settings
 
-## Prérequis
+---
 
-- Docker Engine ;
-- plugin Docker Compose ;
-- accès réseau à Redmine et au serveur SMTP ;
-- clé API Redmine autorisée à consulter les tickets.
+# Architecture
 
-## Installation
+- Static JavaScript frontend served by **nginx**
+- **FastAPI** backend
+- **Redmine REST API**
+- **SQLite** database stored in `/app/data`
+- **nginx** reverse proxy exposed on port **8080**
+
+---
+
+# Requirements
+
+- Docker Engine
+- Docker Compose Plugin
+- Network access to Redmine
+- SMTP server
+- Redmine API key with issue read permissions
+
+---
+
+# Installation
 
 ```bash
 cp .env_template .env
@@ -42,279 +56,356 @@ nano .env
 sudo docker compose up -d --build
 ```
 
-Ouvrir ensuite :
+Open your browser:
 
-```text
-http://ADRESSE_DU_SERVEUR:8080
+```
+http://YOUR_SERVER:8080
 ```
 
-Vérification :
+Verify installation:
 
 ```bash
 curl -s http://localhost:8080/api/health | python3 -m json.tool
 sudo docker compose logs -f backend
 ```
 
-## Configuration Redmine
+---
 
-### Champs utilisés
+# Redmine Configuration
 
-MEP Planner utilise les champs standards Redmine :
+## Standard fields used
 
-- date de début ;
-- date d'échéance ;
-- priorité ;
-- statut ;
-- auteur ;
-- assigné ;
-- temps estimé.
+MEP Planner relies on the following standard Redmine fields:
 
-Il utilise également ces champs personnalisés :
+- Start date
+- Due date
+- Priority
+- Status
+- Author
+- Assignee
+- Estimated time
 
-| Champ | Usage |
-|---|---|
-| `Tag` | sélectionner les tickets contenant `MEP` |
-| `Environnement` | PROD, PREPROD, RECETTE, DEV... |
-| `Heure de début` | horaire au format `HH:MM` |
-| `Heure de fin` | horaire au format `HH:MM` |
+## Custom fields
 
-### Création des champs horaires
+| Field | Purpose |
+|--------|----------|
+| Tag | Select release tickets (`MEP`) |
+| Environment | PROD / PREPROD / TEST / DEV |
+| Start Time | HH:MM |
+| End Time | HH:MM |
 
-Dans Redmine :
+## Creating time fields
 
-```text
-Administration → Champs personnalisés → Demandes → Nouveau champ
+```
+Administration
+→ Custom fields
+→ Issues
+→ New custom field
 ```
 
-Créer deux champs de type **Texte** :
+Create two **Text** fields:
 
-```text
-Heure de début
-Heure de fin
+```
+Start Time
+End Time
 ```
 
-Expression régulière recommandée :
+Recommended validation:
 
-```text
+```
 ^([01][0-9]|2[0-3]):[0-5][0-9]$
 ```
 
-Activer ensuite ces champs dans les projets concernés.
+Enable them in the required projects.
 
-Sans heure de début, MEP Planner affiche **Heure à préciser**. Il n'invente plus 09:00. Si une heure de début et un temps estimé sont fournis mais pas l'heure de fin, celle-ci est calculée automatiquement.
+If **Start Time** is empty, MEP Planner displays:
 
+```
+Time to be defined
+```
 
-## Thèmes et langues
+No artificial time is generated anymore.
 
-Le bouton situé en bas de la barre latérale permet de basculer entre le thème sombre et le thème clair. Le choix du thème est mémorisé dans le navigateur.
+If Start Time and Estimated Time are available but End Time is missing, End Time is automatically calculated.
 
-La langue de l’interface peut être choisie entre français et anglais. Tous les titres, tableaux, filtres, statistiques, calendriers, fenêtres et messages sont issus du dictionnaire de traduction centralisé.
+---
 
-La langue des communications est indépendante et se règle dans **Paramètres → Langue des emails et PDF**. Valeurs initiales dans `.env` :
+# Themes & Languages
+
+The sidebar provides:
+
+- Light / Dark theme
+- French / English interface
+
+The selected theme is stored locally in the browser.
+
+The interface language controls:
+
+- menus
+- tables
+- filters
+- dashboard
+- popups
+- notifications
+
+Communication language (emails & PDF) is configured independently under:
+
+```
+Settings
+→ Email & PDF Language
+```
+
+Default values:
 
 ```env
 APP_LANGUAGE=fr
 COMMUNICATION_LANGUAGE=fr
 ```
 
-Valeurs autorisées : `fr` et `en`. Les réglages enregistrés depuis l’interface sont prioritaires sur les valeurs initiales du `.env`.
+Supported values:
 
-## Configuration SMTP
+```
+fr
+en
+```
 
-Exemple pour un relais SMTP sans authentification sur le port 25 :
+---
+
+# SMTP Configuration
+
+Example:
 
 ```env
 SMTP_ENABLED=true
-SMTP_HOST=smtp.example.fr
+SMTP_HOST=smtp.example.com
 SMTP_PORT=25
 SMTP_USERNAME=
 SMTP_PASSWORD=
-SMTP_FROM=MEP Planner <mep-planner@example.fr>
+SMTP_FROM=MEP Planner <mep-planner@example.com>
 SMTP_USE_TLS=false
 SMTP_USE_SSL=false
-SMTP_RECIPIENTS=exploitation@example.fr;responsable@example.fr
+SMTP_RECIPIENTS=ops@example.com;manager@example.com
 ```
 
-Les communications automatiques sont dédupliquées avec la combinaison :
+Automatic emails are deduplicated using:
 
-```text
-ticket + version Redmine + type de communication + destinataires
+```
+Issue
++
+Redmine version
++
+Communication type
++
+Recipients
 ```
 
-Un renvoi manuel reste toujours possible et est enregistré séparément.
+Manual resend is always available.
 
-## Branding entreprise
+---
 
-Le logo MEP Planner reste permanent. Le menu **Paramètres** permet d'ajouter une identité entreprise complémentaire :
+# Company Branding
 
-- nom ;
-- sous-titre ;
-- couleur ;
-- email de contact ;
-- pied de page ;
-- logo PNG jusqu'à 3 Mo.
+MEP Planner always displays its own identity.
 
-Le logo entreprise est stocké dans le volume `mep-state`, puis utilisé dans l'interface, les emails et les PDF. Il survit aux reconstructions Docker.
+Optionally, a company branding can be added:
 
-Les variables `COMPANY_*` du `.env` servent de valeurs initiales. Les réglages enregistrés depuis l'interface sont prioritaires.
+- Company logo
+- Company name
+- Subtitle
+- Accent color
+- Contact email
+- Footer
 
-## Sauvegarde
+The uploaded logo is stored inside the Docker persistent volume and automatically used in:
 
-La base SQLite, l'état Redmine et le logo entreprise sont dans le volume Docker. Avant une mise à jour :
+- Web interface
+- Emails
+- PDF reports
+
+---
+
+# Backup
+
+Before upgrading:
 
 ```bash
 ./scripts/backup.sh
 ```
 
-Pour choisir le fichier :
+Custom output:
 
 ```bash
-./scripts/backup.sh /chemin/sauvegarde-mep.tar.gz
+./scripts/backup.sh /path/backup.tar.gz
 ```
 
-Restauration :
+Restore:
 
 ```bash
-./scripts/restore.sh /chemin/sauvegarde-mep.tar.gz
+./scripts/restore.sh /path/backup.tar.gz
 ```
 
-## Mise à jour depuis une ancienne version
+---
+
+# Upgrade
 
 ```bash
-cd ../mep-planner-v2.5
-./scripts/backup.sh  # si le script existe dans cette version
+cd ../mep-planner-v2.8
+
+./scripts/backup.sh
+
 sudo docker compose down
 
 cd ../mep-planner-v2.9
-cp ../mep-planner-v2.5/.env .env
+
+cp ../mep-planner-v2.8/.env .env
+
 sudo docker compose up -d --build
 ```
 
-Pour récupérer un ancien volume portant le même nom de projet, conservez le même nom de dossier ou restaurez la sauvegarde avec le script fourni.
+---
 
-## Commandes utiles
+# Useful Commands
 
 ```bash
 sudo docker compose ps
+
 sudo docker compose logs -f backend
+
 sudo docker compose logs --tail=100 nginx frontend
+
 sudo docker compose restart backend
+
 sudo docker compose down
+
 sudo docker compose up -d --build
 ```
 
-## Intégration GitHub
+---
 
-Le fichier `.env` est exclu par `.gitignore`. Vérifiez toujours qu'aucune clé API ou mot de passe n'est ajouté au dépôt.
+# GitHub
 
-Création du dépôt local :
+Official repository
+
+https://github.com/Maxime3d77/MEP-Planner
+
+Initialize repository:
 
 ```bash
 git init
+
 git branch -M main
+
 git add .
-git commit -m "Initial release of MEP Planner v2.9"
+
+git commit -m "Initial release"
 ```
 
-Association à GitHub :
+Connect GitHub:
 
 ```bash
-git remote add origin git@github.com:VOTRE-COMPTE/mep-planner.git
+git remote add origin https://github.com/Maxime3d77/MEP-Planner.git
+
 git push -u origin main
 ```
 
-Création d'une release :
+Create a Release:
 
 ```bash
 git tag -a v2.9.1 -m "MEP Planner v2.9.1"
+
 git push origin main
+
 git push origin v2.9.1
 ```
 
-Mise à jour suivante :
+---
 
-```bash
-git checkout -b feature/ma-fonctionnalite
-git add .
-git commit -m "Ajoute ma fonctionnalité"
-git push -u origin feature/ma-fonctionnalite
+# Administrator Settings
+
+The Settings page is protected by an administrator password.
+
+```env
+ADMIN_PASSWORD=your_secure_password
+ADMIN_SESSION_HOURS=8
 ```
 
-## Sécurité
+The password is never stored in the browser.
 
-- ne publiez jamais `.env` ;
-- révoquez toute clé API exposée ;
-- placez l'application derrière HTTPS pour un usage distant ;
-- limitez l'accès réseau au menu Paramètres ;
-- sauvegardez le volume avant chaque montée de version.
+Only a temporary session token is kept until the browser tab is closed.
 
-## Dépannage
+---
 
-### Redmine ne remonte rien
+# GitHub Version Check
+
+```env
+GITHUB_REPOSITORY_URL=https://github.com/Maxime3d77/MEP-Planner
+
+GITHUB_API_REPOSITORY=Maxime3d77/MEP-Planner
+
+GITHUB_CHECK_TIMEOUT_SECONDS=8
+```
+
+MEP Planner compares the installed version with the latest GitHub Release.
+
+If no Release exists, the latest Git tag is used.
+
+The update checker is **informational only**.
+
+No automatic download or installation is performed.
+
+---
+
+# Security
+
+- Never commit your `.env`
+- Revoke exposed API keys
+- Use HTTPS for remote deployments
+- Restrict access to the Settings page
+- Backup the Docker volume before every upgrade
+
+---
+
+# Troubleshooting
+
+## No Redmine issues found
 
 ```bash
 sudo docker compose logs --tail=200 backend
+
 curl -s http://localhost:8080/api/health | python3 -m json.tool
 ```
 
-Vérifiez le nom exact du champ `Tag`, sa valeur `MEP`, la clé API et les droits Redmine.
+Verify:
 
-### Les horaires ne remontent pas
+- Tag field name
+- Tag value (`MEP`)
+- API key
+- Redmine permissions
 
-Vérifiez que les champs sont activés dans le projet et que les noms correspondent exactement à :
+## Time fields not detected
+
+Verify the custom field names:
 
 ```env
-REDMINE_START_TIME_FIELD=Heure de début
-REDMINE_END_TIME_FIELD=Heure de fin
+REDMINE_START_TIME_FIELD=Start Time
+
+REDMINE_END_TIME_FIELD=End Time
 ```
 
-### L'email échoue
+## SMTP errors
 
 ```bash
 sudo docker compose logs --tail=200 backend | grep -i smtp
 ```
 
-Une erreur SMTP est enregistrée dans la page Communications sans bloquer la synchronisation Redmine.
+SMTP failures are logged in the **Communications** page without interrupting Redmine synchronization.
 
+---
 
-## Thème clair / sombre et langue
+# License
 
-Deux commandes sont disponibles en bas de la barre latérale, juste au-dessus de l’état Redmine :
+This project is distributed as open source.
 
-- sélecteur **Français / English** ;
-- bouton **Thème clair / Thème sombre**.
+Contributions, feature requests and bug reports are welcome via GitHub.
 
-La langue est enregistrée dans SQLite et utilisée par l’interface, les emails et les PDF. Le thème est mémorisé localement dans le navigateur. Les valeurs initiales peuvent être définies dans `.env` avec `APP_LANGUAGE` et `APP_THEME`.
-
-Le nom de l’entreprise est une information de configuration uniquement. Dans les emails et PDF, seul le logo d’entreprise facultatif apparaît à côté de l’identité MEP Planner.
-
-
-## Administration des paramètres
-
-Les modifications dans **Paramètres** sont protégées par le mot de passe défini dans `.env` :
-
-```env
-ADMIN_PASSWORD=utilisez-un-mot-de-passe-long-et-unique
-ADMIN_SESSION_HOURS=8
-```
-
-Le navigateur conserve uniquement un jeton temporaire dans la session. Le mot de passe n’est jamais renvoyé à l’interface après authentification. Fermer l’onglet supprime le jeton local.
-
-## Dépôt GitHub et mises à jour
-
-Dépôt officiel : https://github.com/Maxime3d77/MEP-Planner
-
-```env
-GITHUB_REPOSITORY_URL=https://github.com/Maxime3d77/MEP-Planner
-GITHUB_API_REPOSITORY=Maxime3d77/MEP-Planner
-GITHUB_CHECK_TIMEOUT_SECONDS=8
-```
-
-La page Paramètres compare la version installée avec la dernière **Release GitHub**. En l’absence de release, elle consulte le dernier tag. Pour publier une version détectable :
-
-```bash
-git tag -a v2.9.1 -m "MEP Planner v2.9.1"
-git push origin v2.9.1
-```
-
-Créez ensuite une Release GitHub à partir de ce tag. Le contrôle de mise à jour est informatif : il ne télécharge et n’installe rien automatiquement.
+⭐ If you enjoy this project, consider giving it a star!
