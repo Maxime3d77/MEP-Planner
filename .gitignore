@@ -1,0 +1,11 @@
+.env
+*.db
+*.sqlite
+*.sqlite3
+*.pyc
+__pycache__/
+.DS_Store
+.vscode/
+.idea/
+backup/
+*.tar.gz

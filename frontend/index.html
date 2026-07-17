@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MEP Planner</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <div class="brand-stack">
+      <div class="brand"><img src="/favicon.svg" alt=""><div>MEP Planner<span>Centre de pilotage Redmine</span></div></div>
+      <div id="companyBrand" class="company-brand hidden"><img id="companyBrandLogo" alt="Company logo"></div>
+    </div>
+    <nav>
+      <button class="nav active" data-view="dashboard">Tableau de bord</button>
+      <button class="nav" data-view="today">MEP du jour</button>
+      <button class="nav" data-view="history">Historique MEP</button>
+      <button class="nav" data-view="communications">Communications</button>
+      <button class="nav" id="settingsNav" type="button" data-i18n="settings">Paramètres</button>
+      <a class="github-link" href="https://github.com/Maxime3d77/MEP-Planner" target="_blank" rel="noopener" title="GitHub — MEP Planner" aria-label="GitHub — MEP Planner"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2.22c-3.22.7-3.9-1.37-3.9-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.2 1.77 1.2 1.04 1.77 2.72 1.26 3.38.96.1-.75.4-1.26.74-1.55-2.57-.29-5.27-1.29-5.27-5.73 0-1.27.45-2.3 1.2-3.12-.12-.3-.52-1.48.11-3.08 0 0 .98-.31 3.16 1.19a10.94 10.94 0 0 1 5.76 0c2.18-1.5 3.16-1.19 3.16-1.19.63 1.6.23 2.78.11 3.08.75.82 1.2 1.85 1.2 3.12 0 4.45-2.71 5.43-5.29 5.72.42.36.79 1.07.79 2.16v3.2c0 .31.21.68.8.56A11.5 11.5 0 0 0 12 .7Z"/></svg><span>GitHub</span></a>
+    </nav>
+    <div class="filters" id="filters">
+      <label><span id="filterEnvLabel">Environnement</span><select id="env"><option value="">Tous</option></select></label>
+      <label><span id="filterStatusLabel">Statut</span><select id="status"><option value="">Tous</option></select></label>
+      <label><span id="filterPriorityLabel">Priorité</span><select id="priority"><option value="">Toutes</option></select></label>
+      <label><span id="filterTimeLabel">Horaire</span><select id="timeFilter"><option value="">Tous</option><option value="defined">Défini</option><option value="missing">À préciser</option></select></label>
+    </div>
+    <div class="sidebar-preferences">
+      <label class="preference-control"><span id="languageLabel">Langue</span><select id="languageSwitch"><option value="fr">Français</option><option value="en">English</option></select></label>
+      <button id="themeToggle" class="theme-toggle" type="button"><span id="themeIcon">☀</span><span id="themeText">Thème clair</span></button>
+    </div>
+    <div class="connection"><span id="dot"></span><div><strong>Redmine</strong><small id="mode">Chargement…</small></div></div>
+  </aside>
+  <main>
+    <header>
+      <div><h1 id="pageTitle">Tableau de bord</h1><p id="pageSubtitle">Suivi des mises en production et communications</p></div>
+      <div class="head-actions"><span id="sync"></span><button id="refresh">Synchroniser maintenant</button></div>
+    </header>
+    <section id="stats" class="stats"></section>
+    <section class="panel" id="listPanel">
+      <div class="panel-head"><div><h2 id="listTitle">MEP planifiées</h2><p id="listSubtitle">État des communications inclus</p></div><input id="search" placeholder="Rechercher ticket, sujet, destinataire…"></div>
+      <div class="table-wrap"><table><thead id="thead"></thead><tbody id="rows"></tbody></table></div>
+    </section>
+    <section id="calendarPanel" class="panel">
+      <div class="panel-head"><div><h2 id="calendarTitle">Planning</h2><p id="calendarHelp">Les MEP sans heure restent dans la zone « Heure à préciser »</p></div><div class="calendar-actions"><button id="prev">‹</button><button id="todayBtn">Aujourd’hui</button><button id="next">›</button><div class="segmented"><button data-cal="day">Jour</button><button data-cal="week" class="active">Semaine</button><button data-cal="month">Mois</button></div></div></div>
+      <div id="calendar"></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="issueDialog">
+  <div class="dialog-head"><div><span id="d-id"></span><h2 id="d-title"></h2></div><button id="dialogClose" type="button">✕</button></div>
+  <div id="d-meta" class="meta"></div>
+  <div class="description"><h3 id="dialogDescriptionTitle">Description</h3><p id="d-desc"></p></div>
+  <div class="mail-box"><h3 id="dialogCommunicationTitle">Communication</h3><div id="d-mail"></div><label><span id="resendRecipientsLabel">Renvoyer à une ou plusieurs adresses</span><input id="resendRecipients" placeholder="personne@domaine.fr; autre@domaine.fr"></label><label><span id="resendNoteLabel">Note facultative</span><textarea id="resendNote" placeholder="Message complémentaire"></textarea></label><label class="check"><input type="checkbox" id="includePdf" checked> <span id="includePdfLabel">Joindre la fiche PDF design</span></label><div class="dialog-actions"><button id="resendDefault" class="primary-action"><span class="send-icon">↗</span><span><strong id="resendDefaultTitle">Renvoyer aux destinataires configurés</strong><small id="resendDefaultHint">Utilise la liste définie dans le fichier .env</small></span></button><button id="resendCustom" class="secondary custom-action">Renvoyer aux adresses saisies</button></div><div id="sendResult"></div></div>
+  <div class="dialog-actions"><button id="dialogCloseBottom" class="secondary">Fermer</button><a id="pdfLink" class="secondary" target="_blank">Voir le PDF</a><a id="d-link" target="_blank" rel="noopener">Ouvrir dans Redmine</a></div>
+</dialog>
+
+<dialog id="settingsDialog" class="settings-dialog">
+  <div class="dialog-head"><div><span id="settingsEyebrow">PERSONNALISATION</span><h2 id="settingsTitle">Identité de l’entreprise</h2></div><button id="settingsClose" type="button">✕</button></div>
+  <form id="settingsForm" class="settings-form">
+    <div class="branding-preview">
+      <div class="brand"><img src="/favicon.svg" alt=""><div>MEP Planner<span>Pilotage des mises en production</span></div></div>
+      <div class="branding-separator"></div>
+      <div class="company-preview"><img id="settingsLogoPreview" alt="Logo entreprise"><div><strong id="settingsNamePreview">Votre entreprise</strong><span id="settingsSubtitlePreview">Identité complémentaire</span></div></div>
+    </div>
+    <div class="settings-grid">
+      <label><span id="companyNameLabel">Nom de l’entreprise</span><input id="companyName" maxlength="80" placeholder="My Company"></label>
+      <label><span id="companySubtitleLabel">Sous-titre</span><input id="companySubtitle" maxlength="120" placeholder="Direction des opérations"></label>
+      <label><span id="companyAccentLabel">Couleur entreprise</span><input id="companyAccent" type="color" value="#5B7CFA"></label>
+      <label><span id="companyContactLabel">Email de contact</span><input id="companyContact" type="email" placeholder="exploitation@entreprise.fr"></label>
+      <label class="full"><span id="companyFooterLabel">Pied de page emails et PDF</span><textarea id="companyFooter" placeholder="Communication interne — ne pas diffuser"></textarea></label>
+      <label class="full logo-upload"><span id="companyLogoLabel">Logo entreprise PNG (maximum 3 Mo)</span><input id="companyLogo" type="file" accept="image/png"><small id="companyLogoHint">Le logo est enregistré dans le volume Docker persistant, pas dans le dépôt Git.</small></label>
+    </div>
+    <label class="full"><span id="communicationLanguageLabel">Langue des emails et PDF</span><select id="communicationLanguage"><option value="fr">Français</option><option value="en">English</option></select></label></div><section class="about-box"><div><span>MEP Planner</span><strong>Version <b id="currentVersion">2.9.0</b></strong><small id="updateStatus">Vérification GitHub…</small></div><button id="checkUpdate" type="button" class="secondary">Vérifier les mises à jour</button><a id="githubReleaseLink" class="secondary" href="https://github.com/Maxime3d77/MEP-Planner" target="_blank" rel="noopener">Ouvrir GitHub</a></section><div id="settingsResult"></div>
+    <div class="settings-actions"><button id="deleteLogo" type="button" class="secondary danger">Supprimer le logo</button><button type="button" id="settingsCancel" class="secondary">Annuler</button><button type="submit" class="primary-action compact"><span class="send-icon">✓</span><span><strong id="settingsSaveTitle">Enregistrer la personnalisation</strong><small id="settingsSaveHint">Interface, emails et PDF</small></span></button></div>
+  </form>
+</dialog>
+<dialog id="adminDialog" class="admin-dialog"><div class="dialog-head"><div><span id="adminEyebrow">ADMINISTRATION</span><h2 id="adminTitle">Accès aux paramètres</h2></div><button id="adminClose" type="button">✕</button></div><form id="adminForm" class="admin-form"><p id="adminHelp">Le mot de passe est défini par <code>ADMIN_PASSWORD</code> dans le fichier <code>.env</code>.</p><label><span id="adminPasswordLabel">Mot de passe administrateur</span><input id="adminPassword" type="password" autocomplete="current-password" required autofocus></label><div id="adminResult"></div><div class="settings-actions"><button type="button" id="adminCancel" class="secondary">Annuler</button><button type="submit" class="primary-action compact"><span class="send-icon">🔐</span><span><strong id="adminUnlockTitle">Déverrouiller</strong><small id="adminUnlockHint">Session temporaire</small></span></button></div></form></dialog>
+<script src="/app.js"></script>
+</body>
+</html>
