@@ -28,7 +28,19 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-APP_VERSION = "2.9.0"
+def load_app_version() -> str:
+    """Read the application version from the single root VERSION file."""
+    candidates = (Path("/app/VERSION"), Path(__file__).resolve().parent.parent / "VERSION")
+    for candidate in candidates:
+        try:
+            value = candidate.read_text(encoding="utf-8").strip()
+            if re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", value):
+                return value
+        except OSError:
+            continue
+    return "0.0.0"
+
+APP_VERSION = load_app_version()
 app = FastAPI(title="MEP Planner API", version=APP_VERSION)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
 

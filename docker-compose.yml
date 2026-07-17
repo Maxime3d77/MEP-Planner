@@ -1,6 +1,8 @@
 services:
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: mep-planner-backend
     restart: unless-stopped
     env_file:
@@ -12,7 +14,9 @@ services:
       - mep-net
 
   frontend:
-    build: ./frontend
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: mep-planner-frontend
     restart: unless-stopped
     networks:

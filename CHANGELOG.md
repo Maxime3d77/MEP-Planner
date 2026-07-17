@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.0
+
+- Promoted MEP Planner to the first stable 3.x release.
+- Added a root `VERSION` file as the single source of truth.
+- Backend, API health endpoint, administration page and GitHub update checker now use the same installed version.
+- Updated Docker build contexts so the backend image embeds the root version file.
+- Updated the interface fallback version, documentation and release commands.
+- Preserved all v2.9.1 email and PDF language fixes.
+
 ## 2.9.1
 
 - harmonisation complète du thème clair ;
