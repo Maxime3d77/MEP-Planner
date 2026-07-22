@@ -1,85 +1,283 @@
-<!doctype html>
-<html lang="fr" data-theme="dark">
+<!DOCTYPE html>
+
+<html data-theme="dark" lang="fr">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>MEP Planner</title>
-  <link rel="icon" href="/favicon.svg">
-  <link rel="stylesheet" href="/styles.css">
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>MEP Planner</title>
+<link href="/favicon.svg" rel="icon"/>
+<link href="/styles.css" rel="stylesheet"/>
 </head>
 <body>
-<div class="layout">
-  <aside>
-    <div class="brand-stack">
-      <div class="brand"><img src="/favicon.svg" alt=""><div>MEP Planner<span>Centre de pilotage Redmine</span></div></div>
-      <div id="companyBrand" class="company-brand hidden"><img id="companyBrandLogo" alt="Company logo"></div>
-    </div>
-    <nav>
-      <button class="nav active" data-view="dashboard">Tableau de bord</button>
-      <button class="nav" data-view="today">MEP du jour</button>
-      <button class="nav" data-view="history">Historique MEP</button>
-      <button class="nav" data-view="communications">Communications</button>
-      <button class="nav" id="settingsNav" type="button" data-i18n="settings">Paramètres</button>
-      <a class="github-link" href="https://github.com/Maxime3d77/MEP-Planner" target="_blank" rel="noopener" title="GitHub — MEP Planner" aria-label="GitHub — MEP Planner"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2.22c-3.22.7-3.9-1.37-3.9-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.2 1.77 1.2 1.04 1.77 2.72 1.26 3.38.96.1-.75.4-1.26.74-1.55-2.57-.29-5.27-1.29-5.27-5.73 0-1.27.45-2.3 1.2-3.12-.12-.3-.52-1.48.11-3.08 0 0 .98-.31 3.16 1.19a10.94 10.94 0 0 1 5.76 0c2.18-1.5 3.16-1.19 3.16-1.19.63 1.6.23 2.78.11 3.08.75.82 1.2 1.85 1.2 3.12 0 4.45-2.71 5.43-5.29 5.72.42.36.79 1.07.79 2.16v3.2c0 .31.21.68.8.56A11.5 11.5 0 0 0 12 .7Z"/></svg><span>GitHub</span></a>
-    </nav>
-    <div class="filters" id="filters">
-      <label><span id="filterEnvLabel">Environnement</span><select id="env"><option value="">Tous</option></select></label>
-      <label><span id="filterStatusLabel">Statut</span><select id="status"><option value="">Tous</option></select></label>
-      <label><span id="filterPriorityLabel">Priorité</span><select id="priority"><option value="">Toutes</option></select></label>
-      <label><span id="filterTimeLabel">Horaire</span><select id="timeFilter"><option value="">Tous</option><option value="defined">Défini</option><option value="missing">À préciser</option></select></label>
-    </div>
-    <div class="sidebar-preferences">
-      <label class="preference-control"><span id="languageLabel">Langue</span><select id="languageSwitch"><option value="fr">Français</option><option value="en">English</option></select></label>
-      <button id="themeToggle" class="theme-toggle" type="button"><span id="themeIcon">☀</span><span id="themeText">Thème clair</span></button>
-    </div>
-    <div class="connection"><span id="dot"></span><div><strong>Redmine</strong><small id="mode">Chargement…</small></div></div>
-  </aside>
-  <main>
-    <header>
-      <div><h1 id="pageTitle">Tableau de bord</h1><p id="pageSubtitle">Suivi des mises en production et communications</p></div>
-      <div class="head-actions"><span id="sync"></span><button id="refresh">Synchroniser maintenant</button></div>
-    </header>
-    <section id="stats" class="stats"></section>
-    <section class="panel" id="listPanel">
-      <div class="panel-head"><div><h2 id="listTitle">MEP planifiées</h2><p id="listSubtitle">État des communications inclus</p></div><input id="search" placeholder="Rechercher ticket, sujet, destinataire…"></div>
-      <div class="table-wrap"><table><thead id="thead"></thead><tbody id="rows"></tbody></table></div>
-    </section>
-    <section id="calendarPanel" class="panel">
-      <div class="panel-head"><div><h2 id="calendarTitle">Planning</h2><p id="calendarHelp">Les MEP sans heure restent dans la zone « Heure à préciser »</p></div><div class="calendar-actions"><button id="prev">‹</button><button id="todayBtn">Aujourd’hui</button><button id="next">›</button><div class="segmented"><button data-cal="day">Jour</button><button data-cal="week" class="active">Semaine</button><button data-cal="month">Mois</button></div></div></div>
-      <div id="calendar"></div>
-    </section>
-  </main>
+<section class="login-screen" id="loginScreen">
+<div class="login-card">
+<div class="login-brand"><img alt="" src="/favicon.svg"/><div><strong>MEP Planner</strong><span id="loginSubtitle">Centre de pilotage Redmine</span></div></div>
+<div class="login-heading"><span data-en="SIGN IN" data-fr="CONNEXION" id="loginEyebrow">CONNEXION</span><h1 id="loginTitle">Bienvenue</h1><p id="loginHelp">Connectez-vous pour accéder à MEP Planner.</p></div>
+<form class="login-form" id="mainLoginForm">
+<label><span data-en="Username" data-fr="Identifiant" id="mainLoginUsernameLabel">Identifiant</span><input autocomplete="username" autofocus="" id="mainLoginUsername" required=""/></label>
+<label><span data-en="Password" data-fr="Mot de passe" id="mainLoginPasswordLabel">Mot de passe</span><input autocomplete="current-password" id="mainLoginPassword" required="" type="password"/></label>
+<label class="login-remember"><input id="mainLoginRemember" type="checkbox"/><span id="mainLoginRememberLabel">Se souvenir de moi sur cet appareil</span></label>
+<button class="primary-action" data-en="Sign in" data-fr="Se connecter" id="mainLoginSubmit" type="submit">Se connecter</button>
+<div class="login-result" id="mainLoginResult" role="alert"></div><div class="oidc-login hidden" id="oidcLoginArea"><div class="login-separator"><span>ou</span></div><a class="secondary oidc-button" href="/api/auth/oidc/login" id="oidcLoginButton">Connexion SSO / OIDC</a></div>
+</form>
+<div class="login-footer"><span>MEP Planner</span><span>v5.0.1</span></div>
 </div>
-
+</section>
+<div class="layout hidden" id="appLayout">
+<aside>
+<div class="brand-stack">
+<div class="brand"><img alt="" src="/favicon.svg"/><div>MEP Planner<span>Centre de pilotage Redmine</span></div></div>
+<div class="company-brand hidden" id="companyBrand"><img alt="Company logo" id="companyBrandLogo"/></div>
+</div>
+<nav>
+<button class="nav active" data-view="dashboard">Tableau de bord</button>
+<button class="nav" data-view="today">MEP du jour</button>
+<button class="nav" data-view="history">Historique MEP</button>
+<button class="nav admin-only" data-view="reports" id="reportsNav" type="button">Rapports</button><button class="nav" id="profileNav" type="button">Profil</button><button class="nav admin-only" data-i18n="settings" id="settingsNav" type="button">Paramètres</button><button class="nav logout-nav" id="logoutNav" type="button">Déconnexion</button>
+<a aria-label="GitHub — MEP Planner" class="github-link" href="https://github.com/Maxime3d77/MEP-Planner" rel="noopener" target="_blank" title="GitHub — MEP Planner"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2.22c-3.22.7-3.9-1.37-3.9-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.2 1.77 1.2 1.04 1.77 2.72 1.26 3.38.96.1-.75.4-1.26.74-1.55-2.57-.29-5.27-1.29-5.27-5.73 0-1.27.45-2.3 1.2-3.12-.12-.3-.52-1.48.11-3.08 0 0 .98-.31 3.16 1.19a10.94 10.94 0 0 1 5.76 0c2.18-1.5 3.16-1.19 3.16-1.19.63 1.6.23 2.78.11 3.08.75.82 1.2 1.85 1.2 3.12 0 4.45-2.71 5.43-5.29 5.72.42.36.79 1.07.79 2.16v3.2c0 .31.21.68.8.56A11.5 11.5 0 0 0 12 .7Z" fill="currentColor"></path></svg><span>GitHub</span></a>
+</nav>
+<div class="filters" id="filters">
+<label><span id="filterEnvLabel">Environnement</span><select id="env"><option value="">Tous</option></select></label>
+<label><span id="filterStatusLabel">Statut</span><select id="status"><option value="">Tous</option></select></label>
+<label><span id="filterPriorityLabel">Priorité</span><select id="priority"><option value="">Toutes</option></select></label>
+<label><span id="filterTimeLabel">Horaire</span><select id="timeFilter"><option value="">Tous</option><option value="defined">Défini</option><option value="missing">À préciser</option></select></label>
+</div>
+<div class="sidebar-preferences">
+<label class="preference-control"><span id="languageLabel">Langue</span><select id="languageSwitch"><option value="fr">Français</option><option value="en">English</option></select></label>
+<button class="theme-toggle" id="themeToggle" type="button"><span id="themeIcon">☀</span><span id="themeText">Thème clair</span></button>
+</div>
+<div class="connection"><span id="dot"></span><div><strong>Redmine</strong><small id="mode">Chargement…</small></div></div>
+</aside>
+<main>
+<header>
+<div><h1 id="pageTitle">Tableau de bord</h1><p id="pageSubtitle">Suivi des mises en production et communications</p></div>
+<div class="head-actions"><span id="sync"></span><button id="refresh">Synchroniser maintenant</button></div>
+</header>
+<section class="stats" id="stats"></section>
+<section class="panel" id="listPanel">
+<div class="panel-head"><div><h2 id="listTitle">MEP planifiées</h2><p id="listSubtitle">État des communications inclus</p></div><input id="search" placeholder="Rechercher ticket, sujet, destinataire…"/></div>
+<div class="table-wrap"><table><thead id="thead"></thead><tbody id="rows"></tbody></table></div>
+</section>
+<section class="panel" id="calendarPanel">
+<div class="panel-head"><div><h2 id="calendarTitle">Planning</h2><p id="calendarHelp">Les MEP sans heure restent dans la zone « Heure à préciser »</p></div><div class="calendar-actions"><button id="prev">‹</button><button id="todayBtn">Aujourd’hui</button><button id="next">›</button><div class="segmented"><button data-cal="day">Jour</button><button class="active" data-cal="week">Semaine</button><button data-cal="month">Mois</button></div></div></div>
+<div id="calendar"></div>
+</section>
+<section class="settings-view hidden" id="settingsView">
+<form class="settings-form settings-shell" id="settingsForm">
+<nav aria-label="Sections des paramètres" class="settings-tabs">
+<button class="settings-tab" data-settings-tab="general" type="button">⚙ Général</button>
+<button class="settings-tab active" data-settings-tab="communications" type="button">✉ Communications</button>
+<button class="settings-tab" data-settings-tab="smtp" type="button">⇄ SMTP</button>
+<button class="settings-tab" data-settings-tab="redmine" type="button">◌ Redmine</button>
+<button class="settings-tab" data-settings-tab="users" type="button">♙ Utilisateurs</button>
+<button class="settings-tab" data-settings-tab="ldap" type="button">⌁ LDAP / AD</button><button class="settings-tab" data-settings-tab="sso" type="button">◎ SSO / OIDC</button>
+<button class="settings-tab" data-settings-tab="logs" type="button">▤ Logs</button>
+<button class="settings-tab" data-settings-tab="health" type="button">♥ Santé</button>
+<button class="settings-tab" data-settings-tab="system" type="button">⬆ Mises à jour</button>
+</nav>
+<section class="settings-page" data-settings-page="general">
+<div class="section-heading"><span>GÉNÉRAL</span><h3>Identité et apparence</h3><p>Personnalisez l’identité visuelle de MEP Planner.</p></div>
+<div class="branding-preview">
+<div class="brand"><img alt="" src="/favicon.svg"/><div>MEP Planner<span>Pilotage des mises en production</span></div></div>
+<div class="branding-separator"></div>
+<div class="company-preview"><img alt="Logo entreprise" id="settingsLogoPreview"/><div><strong id="settingsNamePreview">Votre entreprise</strong><span id="settingsSubtitlePreview">Identité complémentaire</span></div></div>
+</div>
+<div class="settings-grid">
+<label><span id="companyNameLabel">Nom de l’entreprise</span><input id="companyName" maxlength="80" placeholder="My Company"/></label>
+<label><span id="companySubtitleLabel">Sous-titre</span><input id="companySubtitle" maxlength="120" placeholder="Direction des opérations"/></label>
+<label><span id="companyAccentLabel">Couleur entreprise</span><input id="companyAccent" type="color" value="#5B7CFA"/></label>
+<label><span id="companyContactLabel">Email de contact</span><input id="companyContact" placeholder="exploitation@entreprise.fr" type="email"/></label>
+<label class="full"><span id="companyFooterLabel">Pied de page emails et PDF</span><textarea id="companyFooter" placeholder="Communication interne — ne pas diffuser"></textarea></label>
+<label class="full logo-upload"><span id="companyLogoLabel">Logo entreprise PNG (maximum 3 Mo)</span><input accept="image/png" id="companyLogo" type="file"/><small id="companyLogoHint">Le logo est enregistré dans le volume Docker persistant.</small></label>
+<label class="full logo-upload"><span>Logo sombre PNG (maximum 3 Mo)</span><input accept="image/png" id="companyLogoDark" type="file"/></label>
+<label class="full logo-upload"><span>Favicon PNG / ICO</span><input accept="image/png,image/x-icon" id="companyFavicon" type="file"/></label>
+<label class="full logo-upload"><span>Fond de connexion PNG / JPG / WebP</span><input accept="image/png,image/jpeg,image/webp" id="loginBackground" type="file"/></label>
+</div>
+</section>
+<section class="settings-page active" data-settings-page="communications">
+<div class="section-heading"><span>COMMUNICATIONS</span><h3 data-i18n="communicationsSettings">Liens, langue et messageries</h3><p data-i18n="communicationsIntro">Configurez les communications envoyées par MEP Planner.</p></div>
+<div class="communication-layout">
+<div class="communication-main">
+<article class="settings-card link-language-card">
+<div class="card-title"><span class="card-icon">🔗</span><div><h4 data-i18n="linksLanguage">Liens et langue</h4><p data-i18n="linksLanguageHelp">Langue par défaut et adresse publique de l’application.</p></div></div>
+<div class="settings-grid compact-grid">
+<label><span id="communicationLanguageLabel">Langue des emails et PDF</span><select id="communicationLanguage"><option value="fr">Français</option><option value="en">English</option></select></label>
+<label><span id="appPublicUrlLabel">URL publique de MEP Planner</span><input id="appPublicUrl" placeholder="https://mep-planner.example.com" type="url"/><small id="appPublicUrlHint">Lien facultatif ajouté aux emails, PDF, invitations et notifications.</small></label>
+</div>
+</article>
+<div class="section-heading inner-heading"><span data-i18n="integrations">INTÉGRATIONS</span><h3 data-en="Team messaging" data-fr="Messageries d’équipe">Messageries d’équipe</h3><p data-en="Matrix is available. Other connectors are prepared for future versions." data-fr="Matrix est disponible. Les autres connecteurs sont préparés pour les prochaines versions.">Matrix est disponible. Les autres connecteurs sont préparés pour les prochaines versions.</p></div>
+<div class="messaging-workspace">
+<div class="connector-list">
+<button class="connector-choice active" type="button"><span class="connector-logo matrix-logo">M</span><strong>Matrix</strong><em data-en="Available" data-fr="Disponible">Disponible</em></button>
+<button class="connector-choice disabled" disabled="" type="button"><span class="connector-logo teams-logo">T</span><strong>Microsoft Teams</strong><em data-en="Coming soon" data-fr="Bientôt">Bientôt</em></button>
+<button class="connector-choice disabled" disabled="" type="button"><span class="connector-logo slack-logo">S</span><strong>Slack</strong><em data-en="Coming soon" data-fr="Bientôt">Bientôt</em></button>
+<button class="connector-choice disabled" disabled="" type="button"><span class="connector-logo discord-logo">D</span><strong>Discord</strong><em data-en="Coming soon" data-fr="Bientôt">Bientôt</em></button>
+<button class="connector-choice disabled" disabled="" type="button"><span class="connector-logo mattermost-logo">M</span><strong>Mattermost</strong><em data-en="Coming soon" data-fr="Bientôt">Bientôt</em></button>
+</div>
+<article class="settings-card matrix-card">
+<div class="matrix-heading"><div class="card-title"><span class="connector-logo matrix-outline">M</span><div><h4>Matrix</h4><p data-en="Receive notifications in a Matrix room." data-fr="Recevez les notifications dans une room Matrix.">Recevez les notifications dans une room Matrix.</p></div></div><label class="switch switch-labelled"><input id="matrixEnabled" type="checkbox"/><span></span><b data-en="Enabled" data-fr="Activé">Activé</b></label></div>
+<div class="connector-fields matrix-fields">
+<label><span id="matrixHomeserverLabel">URL du serveur (Homeserver)</span><input id="matrixHomeserver" placeholder="https://matrix.example.com" type="url"/></label>
+<label><span id="matrixRoomLabel">ID de la room</span><input id="matrixRoomId" placeholder="!roomId:example.com"/><small>Exemple : !roomid:example.com</small></label>
+<label><span id="matrixTokenLabel">Jeton d’accès utilisateur</span><input autocomplete="new-password" id="matrixToken" placeholder="••••••••••••" type="password"/><small id="matrixTokenHint">Laissez vide pour conserver le jeton existant.</small></label>
+<fieldset class="notification-fieldset"><legend data-i18n="notificationTypes">Types de notifications</legend>
+<label class="check"><input checked="" id="matrixNotifyNew" type="checkbox"/><span id="matrixNotifyNewLabel">Nouvelles MEP</span></label>
+<label class="check"><input checked="" id="matrixNotifyChanged" type="checkbox"/><span id="matrixNotifyChangedLabel">MEP modifiées</span></label>
+<label class="check"><input id="matrixNotifyDaily" type="checkbox"/><span id="matrixNotifyDailyLabel">Rappels quotidiens</span></label>
+</fieldset>
+</div>
+<div class="connector-actions"><button class="secondary matrix-test" id="testMatrix" type="button">➤ Tester la connexion Matrix</button><span id="matrixTestResult"></span></div>
+<div class="matrix-preview"><small data-i18n="matrixPreview">Aperçu du message Matrix</small><div class="matrix-message priority-high"><strong>● <span data-i18n="highPriority">PRIORITÉ HAUTE</span></strong><h5><span>MEP #38744</span> — Upgrade Oracle Database</h5><p>▣ 12/06/2025 10:00 → 14:00　|　▤ PRODUCTION　|　♙ John Doe</p><div><a>🔗 <span data-i18n="viewRedmineTicket">Voir le ticket Redmine</span></a><a>◎ <span data-i18n="openInMep">Ouvrir dans MEP Planner</span></a></div></div><p class="preview-hint">ⓘ <span data-i18n="matrixPreviewHint">Le format HTML Matrix reprend automatiquement la couleur de priorité de la MEP.</span></p></div>
+</article>
+</div>
+</div>
+<aside class="communication-side">
+<article class="settings-card side-card"><h4 data-i18n="includedIn">Ce lien sera inclus dans :</h4><ul class="check-list"><li data-i18n="emailsIfEnabled">Emails (si activé)</li><li data-i18n="matrixNotifications">Notifications Matrix</li><li data-i18n="calendarInvitations">Invitations calendrier (.ics)</li><li data-i18n="pdfIfEnabled">PDF (si activé)</li></ul></article>
+<article class="settings-card side-card"><h4 data-i18n="globalOptions">Options globales</h4><label class="check"><input checked="" disabled="" type="checkbox"/> <span data-i18n="attachPdfEmails">Joindre un PDF aux emails</span></label><label class="check"><input checked="" disabled="" type="checkbox"/> <span data-i18n="attachCalendarInvite">Joindre une invitation calendrier (.ics)</span></label><label class="check"><input checked="" disabled="" type="checkbox"/> <span data-i18n="includeRedmineLink">Inclure le lien Redmine</span></label><label class="check"><input checked="" disabled="" type="checkbox"/> <span data-i18n="includeMepLink">Inclure le lien MEP Planner</span></label><small data-i18n="futureConfigurable">Ces options seront rendues configurables dans une prochaine version.</small></article>
+<article class="settings-card side-card"><h4 data-i18n="availableLanguages">Langues disponibles</h4><label class="check"><input checked="" disabled="" type="checkbox"/> Français <em data-i18n="defaultLabel">Par défaut</em></label><label class="check"><input checked="" disabled="" type="checkbox"/> English</label><small data-i18n="userLanguageHint">Chaque utilisateur peut choisir sa langue dans son profil.</small></article>
+</aside>
+</div>
+</section>
+<section class="settings-page" data-settings-page="smtp">
+<div class="section-heading"><span>SMTP</span><h3>Serveur de messagerie</h3><p>Configuration enregistrée en base et conservée pendant les mises à jour. Le fichier .env reste intact.</p></div>
+<article class="settings-card"><div class="settings-grid">
+<label class="check full"><input id="smtpEnabled" type="checkbox"/><span>Activer les e-mails SMTP</span></label>
+<label><span>Serveur SMTP</span><input id="smtpHost" placeholder="smtp.example.com"/></label>
+<label><span>Port</span><input id="smtpPort" min="1" max="65535" type="number" value="587"/></label>
+<label><span>Sécurité</span><select id="smtpSecurity"><option value="none">Aucune</option><option value="starttls">STARTTLS</option><option value="ssl">SSL / TLS</option></select></label>
+<label><span>Nom d’utilisateur</span><input id="smtpUsername" autocomplete="off"/></label>
+<label><span>Mot de passe</span><input id="smtpPassword" type="password" autocomplete="new-password" placeholder="Laisser vide pour conserver"/></label>
+<label><span>Expéditeur</span><input id="smtpFrom" placeholder="MEP Planner <mep@example.com>"/></label>
+<label class="full"><span>Destinataires par défaut</span><input id="smtpRecipients" placeholder="ops@example.com; support@example.com"/></label>
+<label><span>Délai d’expiration (secondes)</span><input id="smtpTimeout" min="5" max="120" type="number" value="15"/></label>
+</div><div class="inline-actions"><button class="secondary" id="testSmtp" type="button">Tester et envoyer un e-mail</button><span id="smtpTestResult"></span></div></article>
+</section>
+<section class="settings-page" data-settings-page="redmine"><div class="section-heading"><span>REDMINE</span><h3 data-i18n="redmineConnectionFields">Connexion et champs personnalisés</h3></div><div class="settings-grid"><label>URL Redmine<input id="redmineUrl" placeholder="https://redmine.example.com"/></label><label><span data-i18n="apiKey">Clé API</span><input id="redmineApiKey" data-i18n-placeholder="keepSecret" placeholder="Laisser vide pour conserver" type="password"/></label><label><span data-i18n="tagField">Champ Tag</span><input id="redmineTagField"/></label><label><span data-i18n="tagValue">Valeur Tag</span><input id="redmineTagValue"/></label><label><span data-i18n="environmentField">Champ environnement</span><input id="redmineEnvField"/></label><label><span data-i18n="startTimeField">Champ heure de début</span><input id="redmineStartField"/></label><label><span data-i18n="endTimeField">Champ heure de fin</span><input id="redmineEndField"/></label><label><span data-i18n="syncInterval">Intervalle de synchronisation (s)</span><input id="pollInterval" min="60" type="number"/></label><label><span data-i18n="maximumPages">Pages maximum</span><input id="maxRedminePages" min="1" type="number"/></label><label class="check"><input id="redmineVerifyTls" type="checkbox"/> Vérifier le certificat TLS</label></div><div class="inline-actions"><button class="secondary" id="testRedmine" type="button"><span data-i18n="testConnection">Tester la connexion</span></button><span id="redmineTestResult"></span></div></section>
+<section class="settings-page" data-settings-page="users"><div class="section-heading"><span data-i18n="usersEyebrow">UTILISATEURS</span><h3 data-i18n="accountsRoles">Comptes et rôles</h3><p data-i18n="twoRoles">Deux rôles : Utilisateur et Administrateur.</p></div><div class="users-toolbar"><button class="primary-action compact" id="newLocalUser" type="button">+ <span data-i18n="localAccount">Compte local</span></button><button class="secondary" id="openLdapImport" type="button"> <span data-i18n="importLdap">Importer depuis LDAP</span></button><input id="userSearch" data-i18n-placeholder="searchUser" placeholder="Rechercher un utilisateur…" type="search"/></div><div class="users-table" id="usersTable"></div><div class="settings-card hidden" id="userEditor"><h4 data-i18n="createLocalAccount" id="userEditorTitle">Créer un compte local</h4><div class="settings-grid"><label><span data-i18n="username">Identifiant</span><input id="userUsername"/></label><label><span data-i18n="displayName">Nom affiché</span><input id="userDisplayName"/></label><label>Email<input id="userEmail" type="email"/></label><label><span data-i18n="password">Mot de passe</span><input id="userPassword" type="password"/></label><label><span data-i18n="role">Rôle</span><select id="userRole"><option value="user">Utilisateur</option><option value="admin">Administrateur</option></select></label><label><span data-i18n="interfaceLanguageShort">Langue interface</span><select id="userLanguage"><option value="fr">Français</option><option value="en">English</option></select></label><label><span data-i18n="communicationsLanguageShort">Langue communications</span><select id="userCommunicationLanguage"><option value="fr">Français</option><option value="en">English</option></select></label><label class="check"><input checked="" id="userEmailEnabled" type="checkbox"/> Recevoir les emails</label><label class="check"><input checked="" id="userActive" type="checkbox"/> Compte actif</label></div><div class="inline-actions"><button class="primary-action compact" id="saveUser" type="button">Enregistrer</button><button class="secondary" data-en="Cancel" data-fr="Annuler" id="cancelUser" type="button">Annuler</button><span id="userResult"></span></div></div><div class="settings-card hidden" id="ldapImportPanel"><h4 data-i18n="importLdap">Importer depuis LDAP</h4><div class="inline-actions"><input id="ldapSearchQuery" data-i18n-placeholder="nameUsernameEmail" placeholder="Nom, identifiant ou email"/><button class="secondary" id="ldapSearchBtn" type="button"> <span data-i18n="search">Rechercher</span></button></div><div id="ldapSearchResults"></div></div></section>
+<section class="settings-page" data-settings-page="ldap">
+<div class="section-heading"><span data-i18n="ldapEyebrow">LDAP / ACTIVE DIRECTORY</span><h3 data-i18n="ldapTitle">Configuration de l’annuaire</h3><p data-i18n="ldapIntro">Authentification LDAP, import des groupes et provisionnement automatique à la connexion.</p></div>
+<div class="ldap-wizard">
+<article class="settings-card"><h4 data-i18n="ldapConnection">1. Connexion</h4><div class="settings-grid">
+<label class="check"><input id="ldapEnabled" type="checkbox"/><span data-i18n="ldapEnable">Activer LDAP</span></label>
+<label><span data-i18n="ldapName">Nom</span><input id="ldapName" placeholder="Aday"/></label>
+<label><span data-i18n="ldapType">Type d’annuaire</span><select id="ldapDirectoryType"><option value="openldap">OpenLDAP</option><option value="active_directory">Active Directory</option><option value="freeipa">FreeIPA</option><option data-i18n="other" value="other">Autre</option></select></label>
+<label><span data-i18n="ldapHost">Hôte</span><input id="ldapUrl" placeholder="ldaps://ldap.example.com"/></label>
+<label><span data-i18n="port">Port</span><input id="ldapPort" type="number" value="636"/></label>
+<label><span data-i18n="ldapBindDn">Compte technique / Bind DN</span><input id="ldapBindDn" placeholder="cn=ldap-reader,ou=Services,dc=example,dc=com"/></label>
+<label><span data-i18n="ldapBindPassword">Mot de passe Bind</span><input data-i18n-placeholder="keepSecret" id="ldapBindPassword" data-i18n-placeholder="keepSecret" placeholder="Laisser vide pour conserver" type="password"/></label>
+<label class="check"><input id="ldapVerifyTls" type="checkbox"/><span data-i18n="ldapVerifyTls">Vérifier le certificat TLS</span></label>
+<label class="check"><input id="ldapJit" type="checkbox"/><span data-i18n="ldapJit">Provisionnement JIT à la connexion</span></label>
+</div><div class="certificate-box"><label><span data-i18n="ldapCaCertificate">Certificat CA LDAPS (.pem/.crt/.cer)</span><input accept=".pem,.crt,.cer,application/x-pem-file" id="ldapCaFile" type="file"/></label><button class="secondary" data-i18n="importCertificate" id="uploadLdapCa" type="button">Importer le certificat</button><span id="ldapCaStatus"></span></div></article>
+<article class="settings-card"><h4 data-i18n="ldapUsers">2. Utilisateurs</h4><div class="settings-grid">
+<label><span data-i18n="ldapBaseDn">Base DN</span><input id="ldapBaseDn" placeholder="ou=People,dc=example,dc=com"/></label>
+<label><span data-i18n="ldapSearchAttribute">Attribut de connexion</span><input id="ldapLoginAttribute" value="uid"/><small data-i18n="ldapSearchAttributeHelp">Attribut saisi par l’utilisateur lors de la connexion.</small></label>
+<label><span data-i18n="ldapUserFilter">Filtre utilisateur</span><input id="ldapUserFilter" value="(&amp;(objectClass=person)(uid={username}))"/></label>
+<label><span data-i18n="firstNameAttribute">Attribut prénom</span><input id="ldapNameAttribute" value="givenName"/></label>
+<label><span data-i18n="lastNameAttribute">Attribut nom</span><input id="ldapLastNameAttribute" value="sn"/></label>
+<label><span data-i18n="emailAttribute">Attribut email</span><input id="ldapEmailAttribute" value="mail"/></label>
+</div></article>
+<article class="settings-card"><h4 data-i18n="ldapGroups">3. Groupes et rôles</h4><div class="settings-grid">
+<label><span data-i18n="ldapGroupBaseDn">Base DN groupes</span><input id="ldapGroupBaseDn" placeholder="ou=Groups,dc=example,dc=com"/></label>
+<label><span data-i18n="groupObjectClass">Classe des groupes</span><input id="ldapGroupObjectClass" value="posixGroup"/></label>
+<label><span data-i18n="groupNameAttribute">Attribut nom du groupe</span><input id="ldapGroupNameAttribute" value="cn"/></label>
+<label><span data-i18n="groupMemberAttribute">Attribut des membres</span><input id="ldapGroupMemberAttribute" value="memberUid"/></label>
+<label><span data-i18n="referenceAttribute">Attribut de référence</span><input id="ldapReferenceAttribute" value="uid"/></label>
+<label><span data-i18n="groupFilter">Filtre de groupe</span><input id="ldapGroupFilter" value="(memberUid=%{ref})"/></label>
+</div><div class="inline-actions"><button class="secondary" data-i18n="discoverGroups" id="discoverLdapGroups" type="button">Découvrir les groupes</button><span id="ldapGroupsResult"></span></div>
+<p class="field-help" data-i18n="groupMappingHelp">Choisissez les groupes autorisés et leur rôle. Les groupes non sélectionnés ne donnent aucun accès.</p>
+<div class="ldap-group-mapping" id="ldapGroupsList"></div>
+<input id="ldapGroupMap" type="hidden"/>
+</article>
+</div>
+<details class="help-box"><summary data-i18n="ldapExample">Exemple OpenLDAP correspondant à votre configuration</summary><pre>Name: Enterprise directory
+Host: ldaps://ldap.example.com
+Port: 636
+User base DN: ou=People,dc=example,dc=com
+Login attribute: uid
+Bind DN: cn=ldap-reader,ou=Services,dc=example,dc=com
+Group base DN: ou=Groups,dc=example,dc=com
+Group class: posixGroup
+Group name attribute: cn
+Group member attribute: memberUid
+Reference attribute: uid
+Group filter: ({member_attribute}={reference})
+Group mapping: operations:user;mep-admins:admin
+First name: givenName
+Last name: sn</pre></details>
+<div class="inline-actions"><button class="secondary" data-i18n="testLdap" id="testLdap" type="button">Tester LDAP</button><span id="ldapTestResult"></span></div>
+</section><section class="settings-page" data-settings-page="sso"><div class="section-heading"><span>SSO / OPENID CONNECT</span><h3 data-en="Federated authentication" data-fr="Authentification fédérée">Authentification fédérée</h3></div><div class="settings-grid"><label class="check"><input id="oidcEnabled" type="checkbox"/> <span data-i18n="enableOidc">Activer OIDC</span></label><label><span data-i18n="discoveryUrl">URL de découverte</span><input id="oidcDiscoveryUrl" placeholder="https://sso.example.com/.well-known/openid-configuration"/></label><label>Client ID<input id="oidcClientId"/></label><label>Client secret<input id="oidcClientSecret" data-i18n-placeholder="keepSecret" placeholder="Laisser vide pour conserver" type="password"/></label><label>Scopes<input id="oidcScopes"/></label><label><span data-i18n="usernameClaim">Claim utilisateur</span><input id="oidcUsernameClaim"/></label><label><span data-i18n="emailClaim">Claim email</span><input id="oidcEmailClaim"/></label><label><span data-i18n="groupsClaim">Claim groupes</span><input id="oidcGroupsClaim"/></label><label><span data-i18n="allowedGroup">Groupe autorisé</span><input id="oidcAllowedGroup"/></label><label><span data-i18n="administratorGroup">Groupe administrateur</span><input id="oidcAdminGroup"/></label><label class="check"><input id="oidcAutoCreate" type="checkbox"/> <span data-i18n="autoCreateUsers">Créer automatiquement les utilisateurs</span></label><label><span data-i18n="redirectUrl">URL de redirection</span><input id="oidcRedirectUri" readonly=""/></label></div><div class="inline-actions"><button class="secondary" data-en="Test OIDC" data-fr="Tester OIDC" id="testOidc" type="button">Tester OIDC</button><span id="oidcTestResult"></span></div></section>
+<section class="settings-page" data-settings-page="logs">
+<div class="section-heading"><span id="logsEyebrow">LOGS</span><h3 data-en="Integration diagnostics" data-fr="Diagnostics des intégrations" id="logsTitle">Diagnostics des intégrations</h3><p data-en="Review technical events from Redmine, SMTP, Matrix, LDAP and OIDC." data-fr="Consultez les événements techniques de Redmine, SMTP, Matrix, LDAP et OIDC." id="logsHelp">Consultez les événements techniques de Redmine, SMTP, Matrix, LDAP et OIDC.</p></div>
+<article class="settings-card log-console-card">
+<div class="logs-toolbar">
+<label><span data-en="Log type" data-fr="Type de log" id="logTypeLabel">Type de log</span><select id="logType"><option value="redmine">Redmine</option><option value="smtp">SMTP</option><option value="matrix">Matrix</option><option value="ldap">LDAP / AD</option><option value="oidc">SSO / OIDC</option><option data-en="Authentication" data-fr="Authentification" value="authentication">Authentification</option><option value="application">Application</option></select></label>
+<label><span data-en="Number of lines" data-fr="Nombre de lignes" id="logLimitLabel">Nombre de lignes</span><select id="logLimit"><option>50</option><option selected="">200</option><option>500</option><option>1000</option></select></label>
+<button class="secondary" data-en="Refresh" data-fr="Actualiser" id="refreshLogs" type="button">Actualiser</button>
+</div>
+<div class="logs-status" id="logsStatus"></div>
+<div class="table-wrap logs-table-wrap"><table class="logs-table"><thead><tr><th id="logDateHeader">Date</th><th data-en="Level" data-fr="Niveau" id="logLevelHeader">Niveau</th><th id="logMessageHeader">Message</th><th data-en="Details" data-fr="Détails" id="logDetailsHeader">Détails</th></tr></thead><tbody id="logsRows"></tbody></table></div>
+</article>
+</section>
+<section class="settings-page" data-settings-page="health"><div class="section-heading"><span>SANTÉ</span><h3>État des services</h3><p>Diagnostic rapide des composants et de la persistance.</p></div><article class="settings-card"><div class="health-grid" id="healthGrid"></div><div class="inline-actions"><button class="secondary" id="refreshHealth" type="button">Actualiser</button></div></article></section>
+<section class="settings-page" data-settings-page="system"><div class="section-heading"><span>MISES À JOUR</span><h3>Mise à jour sécurisée</h3><p>La procédure sauvegarde et conserve le .env, la base, les logos, les journaux et les sauvegardes.</p></div><section class="about-box"><div><span>MEP Planner</span><strong>Version <b id="currentVersion">5.0.1</b></strong><small id="updateStatus">Vérification GitHub…</small><small id="updatePreserved">Conservé : .env, data/, branding, logs/ et backups/</small></div><button class="secondary" id="checkUpdate" type="button">Vérifier les mises à jour</button><a class="secondary" href="https://github.com/Maxime3d77/MEP-Planner" id="githubReleaseLink" rel="noopener" target="_blank">Ouvrir GitHub</a></section><article class="settings-card"><h4>Installation</h4><p>Sur le serveur, lancez <code>./scripts/update.sh</code>. Le script crée une sauvegarde, télécharge la version, reconstruit les conteneurs et effectue un contrôle de santé avec restauration en cas d’échec.</p></article></section>
+<div id="settingsResult"></div>
+<div class="settings-actions sticky-actions"><button class="secondary danger" data-en="Delete logo" data-fr="Supprimer le logo" id="deleteLogo" type="button">Supprimer le logo</button><button class="secondary" data-en="Cancel" data-fr="Annuler" id="settingsCancel" type="button">Annuler</button><button class="primary-action compact" type="submit"><span class="send-icon">✓</span><span><strong data-en="Save settings" data-fr="Enregistrer les paramètres" id="settingsSaveTitle">Enregistrer les paramètres</strong><small data-en="Changes are applied immediately" data-fr="Les modifications sont appliquées immédiatement" id="settingsSaveHint">Les modifications sont appliquées immédiatement</small></span></button></div>
+</form>
+</section>
+<section class="reports-view hidden" id="reportsView">
+<div class="reports-toolbar">
+<div class="section-heading">
+<span data-i18n="reportsEyebrow">RAPPORTS</span>
+<h3 data-i18n="reportsActivity">Activité et qualité de planification</h3>
+<p data-i18n="reportsHelp">Analysez les MEP, la qualité du planning et les communications.</p>
+</div>
+<label class="report-period"><span data-i18n="reportPeriod">Période</span>
+<select id="reportDays"><option value="7">7</option><option selected="" value="30">30</option><option value="90">90</option><option value="365">365</option></select>
+<small data-i18n="reportDays">jours</small>
+</label>
+</div>
+<div class="report-kpis" id="reportCards"></div>
+<div class="report-dashboard">
+<article class="report-chart-card report-wide">
+<div class="report-card-head">
+<div><span data-i18n="reportTrendEyebrow">TENDANCE</span><h4 data-i18n="reportTrend">MEP dans le temps</h4></div>
+<div aria-label="Série affichée" class="chart-series-switch" role="group">
+<button class="active" data-i18n="reportCompleted" data-report-series="completed" type="button">Terminées</button>
+<button data-i18n="reportScheduled" data-report-series="scheduled" type="button">Programmées</button>
+<button data-i18n="reportBoth" data-report-series="both" type="button">Les deux</button>
+</div>
+</div>
+<div class="chart-stage" id="reportTimeline"></div>
+</article>
+<article class="report-chart-card">
+<div class="report-card-head"><div><span data-i18n="reportDistribution">RÉPARTITION</span><h4 data-i18n="byStatus">Par statut</h4><small data-i18n="reportAllStatuses">Tous les statuts</small></div></div>
+<div class="chart-stage" id="reportStatus"></div>
+</article>
+<article class="report-chart-card">
+<div class="report-card-head"><div><span data-i18n="reportDistribution">RÉPARTITION</span><h4 data-i18n="byPriority">Par priorité</h4><small data-i18n="reportAllPriorities">Toutes les priorités</small></div></div>
+<div class="chart-stage" id="reportPriority"></div>
+</article>
+<article class="report-chart-card report-wide">
+<div class="report-card-head"><div><span data-i18n="reportDistribution">RÉPARTITION</span><h4 data-i18n="byEnvironment">Par environnement</h4><small data-i18n="reportAllEnvironments">Tous les environnements</small></div></div>
+<div class="chart-stage" id="reportEnv"></div>
+</article>
+<article class="report-chart-card">
+<div class="report-card-head"><div><span data-i18n="communications">COMMUNICATIONS</span><h4 data-i18n="reportDelivery">Livraison des notifications</h4></div></div>
+<div class="chart-stage" id="reportCommunications"></div>
+</article>
+</div>
+</section>
+<section id="profileView" class="settings-view profile-view hidden"><form class="settings-form profile-shell" id="profileForm"><div class="section-heading"><span data-i18n="profileEyebrow">PROFIL</span><h3 data-i18n="personalPreferences">Préférences personnelles</h3><p data-i18n="profileHelp">Configurez votre langue et vos communications.</p></div><div class="settings-card"><div class="settings-grid"><label><span data-i18n="interfaceLanguage">Langue par défaut de l’interface</span><select id="profileLanguage"><option value="fr">Français</option><option value="en">English</option></select></label><label><span data-i18n="communicationsLanguage">Langue des communications</span><select id="profileCommunicationLanguage"><option value="fr">Français</option><option value="en">English</option></select></label><label class="check"><input id="profileEmailEnabled" type="checkbox"/><span data-i18n="receiveEmails">Recevoir les communications email</span></label><label><span data-i18n="newLocalPassword">Nouveau mot de passe local</span><input data-i18n-placeholder="optional" id="profilePassword" placeholder="Facultatif" type="password"/></label></div></div><div class="settings-actions"><button class="primary-action compact" data-i18n="saveProfile" type="submit">Enregistrer mon profil</button><span id="profileResult"></span></div></form></section>
+</main>
+</div>
 <dialog id="issueDialog">
-  <div class="dialog-head"><div><span id="d-id"></span><h2 id="d-title"></h2></div><button id="dialogClose" type="button">✕</button></div>
-  <div id="d-meta" class="meta"></div>
-  <div class="description"><h3 id="dialogDescriptionTitle">Description</h3><p id="d-desc"></p></div>
-  <div class="mail-box"><h3 id="dialogCommunicationTitle">Communication</h3><div id="d-mail"></div><label><span id="resendRecipientsLabel">Renvoyer à une ou plusieurs adresses</span><input id="resendRecipients" placeholder="personne@domaine.fr; autre@domaine.fr"></label><label><span id="resendNoteLabel">Note facultative</span><textarea id="resendNote" placeholder="Message complémentaire"></textarea></label><label class="check"><input type="checkbox" id="includePdf" checked> <span id="includePdfLabel">Joindre la fiche PDF design</span></label><div class="dialog-actions"><button id="resendDefault" class="primary-action"><span class="send-icon">↗</span><span><strong id="resendDefaultTitle">Renvoyer aux destinataires configurés</strong><small id="resendDefaultHint">Utilise la liste définie dans le fichier .env</small></span></button><button id="resendCustom" class="secondary custom-action">Renvoyer aux adresses saisies</button></div><div id="sendResult"></div></div>
-  <div class="dialog-actions"><button id="dialogCloseBottom" class="secondary">Fermer</button><a id="pdfLink" class="secondary" target="_blank">Voir le PDF</a><a id="d-link" target="_blank" rel="noopener">Ouvrir dans Redmine</a></div>
+<div class="dialog-head"><div><span id="d-id"></span><h2 id="d-title"></h2></div><button id="dialogClose" type="button">✕</button></div>
+<div class="meta" id="d-meta"></div>
+<div class="description"><h3 id="dialogDescriptionTitle">Description</h3><p id="d-desc"></p></div>
+<div class="mail-box"><h3 id="dialogCommunicationTitle">Communication</h3><div id="d-mail"></div><label><span id="resendRecipientsLabel">Renvoyer à une ou plusieurs adresses</span><input id="resendRecipients" placeholder="personne@domaine.fr; autre@domaine.fr"/></label><label><span id="resendNoteLabel">Note facultative</span><textarea id="resendNote" placeholder="Message complémentaire"></textarea></label><label class="check"><input checked="" id="includePdf" type="checkbox"/> <span id="includePdfLabel">Joindre la fiche PDF design</span></label><div class="dialog-actions"><button class="primary-action" id="resendDefault"><span class="send-icon">↗</span><span><strong id="resendDefaultTitle">Renvoyer aux destinataires configurés</strong><small id="resendDefaultHint">Utilise la liste définie dans le fichier .env</small></span></button><button class="secondary custom-action" id="resendCustom">Renvoyer aux adresses saisies</button></div><div id="sendResult"></div></div>
+<div class="dialog-actions"><button class="secondary" id="dialogCloseBottom">Fermer</button><a class="secondary" id="pdfLink" target="_blank">Voir le PDF</a><a id="d-link" rel="noopener" target="_blank">Ouvrir dans Redmine</a></div>
 </dialog>
-
-<dialog id="settingsDialog" class="settings-dialog">
-  <div class="dialog-head"><div><span id="settingsEyebrow">PERSONNALISATION</span><h2 id="settingsTitle">Identité de l’entreprise</h2></div><button id="settingsClose" type="button">✕</button></div>
-  <form id="settingsForm" class="settings-form">
-    <div class="branding-preview">
-      <div class="brand"><img src="/favicon.svg" alt=""><div>MEP Planner<span>Pilotage des mises en production</span></div></div>
-      <div class="branding-separator"></div>
-      <div class="company-preview"><img id="settingsLogoPreview" alt="Logo entreprise"><div><strong id="settingsNamePreview">Votre entreprise</strong><span id="settingsSubtitlePreview">Identité complémentaire</span></div></div>
-    </div>
-    <div class="settings-grid">
-      <label><span id="companyNameLabel">Nom de l’entreprise</span><input id="companyName" maxlength="80" placeholder="My Company"></label>
-      <label><span id="companySubtitleLabel">Sous-titre</span><input id="companySubtitle" maxlength="120" placeholder="Direction des opérations"></label>
-      <label><span id="companyAccentLabel">Couleur entreprise</span><input id="companyAccent" type="color" value="#5B7CFA"></label>
-      <label><span id="companyContactLabel">Email de contact</span><input id="companyContact" type="email" placeholder="exploitation@entreprise.fr"></label>
-      <label class="full"><span id="companyFooterLabel">Pied de page emails et PDF</span><textarea id="companyFooter" placeholder="Communication interne — ne pas diffuser"></textarea></label>
-      <label class="full logo-upload"><span id="companyLogoLabel">Logo entreprise PNG (maximum 3 Mo)</span><input id="companyLogo" type="file" accept="image/png"><small id="companyLogoHint">Le logo est enregistré dans le volume Docker persistant, pas dans le dépôt Git.</small></label>
-    </div>
-    <label class="full"><span id="communicationLanguageLabel">Langue des emails et PDF</span><select id="communicationLanguage"><option value="fr">Français</option><option value="en">English</option></select></label></div><section class="about-box"><div><span>MEP Planner</span><strong>Version <b id="currentVersion">3.0.0</b></strong><small id="updateStatus">Vérification GitHub…</small></div><button id="checkUpdate" type="button" class="secondary">Vérifier les mises à jour</button><a id="githubReleaseLink" class="secondary" href="https://github.com/Maxime3d77/MEP-Planner" target="_blank" rel="noopener">Ouvrir GitHub</a></section><div id="settingsResult"></div>
-    <div class="settings-actions"><button id="deleteLogo" type="button" class="secondary danger">Supprimer le logo</button><button type="button" id="settingsCancel" class="secondary">Annuler</button><button type="submit" class="primary-action compact"><span class="send-icon">✓</span><span><strong id="settingsSaveTitle">Enregistrer la personnalisation</strong><small id="settingsSaveHint">Interface, emails et PDF</small></span></button></div>
-  </form>
-</dialog>
-<dialog id="adminDialog" class="admin-dialog"><div class="dialog-head"><div><span id="adminEyebrow">ADMINISTRATION</span><h2 id="adminTitle">Accès aux paramètres</h2></div><button id="adminClose" type="button">✕</button></div><form id="adminForm" class="admin-form"><p id="adminHelp">Le mot de passe est défini par <code>ADMIN_PASSWORD</code> dans le fichier <code>.env</code>.</p><label><span id="adminPasswordLabel">Mot de passe administrateur</span><input id="adminPassword" type="password" autocomplete="current-password" required autofocus></label><div id="adminResult"></div><div class="settings-actions"><button type="button" id="adminCancel" class="secondary">Annuler</button><button type="submit" class="primary-action compact"><span class="send-icon">🔐</span><span><strong id="adminUnlockTitle">Déverrouiller</strong><small id="adminUnlockHint">Session temporaire</small></span></button></div></form></dialog>
+<dialog class="admin-dialog" id="adminDialog"><div class="dialog-head"><div><span id="adminEyebrow">ADMINISTRATION</span><h2 id="adminTitle">Accès aux paramètres</h2></div><button id="adminClose" type="button">✕</button></div><form class="admin-form" id="adminForm"><p id="adminHelp">Le mot de passe est défini par <code>ADMIN_PASSWORD</code> dans le fichier <code>.env</code>.</p><label><span id="adminPasswordLabel">Mot de passe administrateur</span><input autocomplete="current-password" autofocus="" id="adminPassword" required="" type="password"/></label><div id="adminResult"></div><div class="settings-actions"><button class="secondary" data-en="Cancel" data-fr="Annuler" id="adminCancel" type="button">Annuler</button><button class="primary-action compact" type="submit"><span class="send-icon">🔐</span><span><strong id="adminUnlockTitle">Déverrouiller</strong><small id="adminUnlockHint">Session temporaire</small></span></button></div></form></dialog>
 <script src="/app.js"></script>
-</body>
+<dialog class="admin-dialog" id="userLoginDialog"><div class="dialog-head"><div><span data-en="SIGN IN" data-fr="CONNEXION">CONNEXION</span><h2 data-en="MEP Planner account" data-fr="Compte MEP Planner">Compte MEP Planner</h2></div><button id="userLoginClose" type="button">✕</button></div><form class="admin-form" id="userLoginForm"><label><span data-i18n="username">Identifiant</span><input autocomplete="username" id="loginUsername"/></label><label><span data-i18n="password">Mot de passe</span><input autocomplete="current-password" id="loginPassword" type="password"/></label><div id="loginResult"></div><div class="settings-actions" data-en="Sign in" data-fr="Se connecter"><button class="primary-action compact" data-en="Sign in" data-fr="Se connecter" type="submit">Se connecter</button></div></form></dialog></body>
 </html>

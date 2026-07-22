@@ -1,60 +1,112 @@
 # Changelog
 
-## 3.0.0
+## 5.0.1 - 2026-07-21
 
-- Promoted MEP Planner to the first stable 3.x release.
-- Added a root `VERSION` file as the single source of truth.
-- Backend, API health endpoint, administration page and GitHub update checker now use the same installed version.
-- Updated Docker build contexts so the backend image embeds the root version file.
-- Updated the interface fallback version, documentation and release commands.
-- Preserved all v2.9.1 email and PDF language fixes.
+- Added a dedicated SMTP administration tab with connection testing.
+- Added persistent light/dark logos, favicon and login background assets.
+- Added authentication and application log views and richer authentication events.
+- LDAP login logs now contain only mapped MEP Planner groups and the resolved role.
+- Added service health diagnostics.
+- Added a safe host-side updater with backup, preserved `.env`/data/branding/logs, health check and rollback.
+- Moved runtime data, logs and backups to persistent host directories.
 
-## 2.9.1
 
-- harmonisation complète du thème clair ;
-- champs de recherche, listes déroulantes et boutons secondaires en palette violet clair ;
-- traduction FR/EN centralisée de toute l’interface ;
-- traduction des titres, statistiques, tableaux, filtres, calendriers, popups et paramètres ;
-- ajout du choix séparé de langue pour les emails et PDF ;
-- ajout de `COMMUNICATION_LANGUAGE` dans `.env_template` et `.env.example` ;
-- README actualisé.
+## v5.0.1
 
-## 2.9.1
+### Fixed
+- Status pie chart now includes in-progress, completed and every other status in the selected reporting window.
+- Priority chart now includes all priorities from past and upcoming scheduled releases.
+- Environment chart now includes every environment instead of only production values.
 
-- Protection des paramètres par mot de passe administrateur défini dans `.env`.
-- Sessions administrateur temporaires.
-- Lien GitHub discret dans la barre latérale.
-- Comparaison de la version installée avec la dernière release ou le dernier tag GitHub.
-- Bloc À propos et état de mise à jour dans Paramètres.
-- Boutons du thème clair adoucis avec un dégradé violet clair.
-- Documentation et `.env_template` actualisés.
+### Changed
+- Status, priority and environment breakdowns now use the full selected window: past period, today and upcoming scheduled releases.
+- Report totals and planning-quality metrics use the same complete reporting scope.
 
-# Changelog
+## v4.0.5
 
-## 2.7.0
+### Added
+- Toggle between completed releases, scheduled releases and both trend series.
+- Future scheduled releases are now included in the reporting API.
+- Scheduled releases use a dedicated blue dashed line.
 
-- thème clair et sombre mémorisé par navigateur ;
-- interface français/anglais ;
-- langue globale appliquée aux communications ;
-- branding générique « My Company » ;
-- retrait du nom de société des emails et PDF ;
-- conservation du logo entreprise facultatif seul.
+### Changed
+- The trend chart selector is available directly in the report card.
+- Completed releases retain the soft green visual style.
 
-# Changelog
+## v4.0.4
 
-## 2.6.0
+### Fixed
+- Left navigation panel now scrolls independently when the viewport height is too small.
+- Prevented menu items from becoming inaccessible on laptops and small screens.
 
-- Ajout du menu Paramètres.
-- Ajout d'un logo et d'une identité d'entreprise complémentaires à MEP Planner.
-- Persistance du branding entreprise dans SQLite et dans le volume Docker.
-- Utilisation du logo entreprise dans l'interface, les emails et les PDF.
-- Suppression de l'heure fictive 09:00 lorsque Redmine ne fournit pas d'horaire.
-- Ajout du statut « Heure à préciser » et d'un filtre dédié.
-- Calcul automatique de l'heure de fin à partir du temps estimé uniquement si une heure de début existe.
-- Ajout de `.env_template`, `.gitignore`, d'un README GitHub et d'un script de sauvegarde.
-- Version API 2.6.0.
+## v4.0.4
 
-## 2.9.1
+### Changed
+- The release trend chart now uses a soft, high-contrast green palette.
+- Improved chart line, area and point visibility in dark mode.
+- Added subtle glow and stronger point markers without making the graph visually aggressive.
 
-- Fixed communication language propagation to automatic emails, manual resends and PDF reports.
-- Email subjects, HTML content, plain-text fallback, PDF labels and filenames now follow the communication language setting.
+### Fixed
+- Low-contrast trend rendering that made the release series difficult to read.
+
+## v4.0.2
+
+### Added
+- Total upcoming releases KPI on the dashboard.
+
+### Changed
+- Extended English translations across Communications, Redmine, Users and OIDC settings.
+- User role and action labels now follow the selected interface language.
+
+### Fixed
+- Report trend area rendering as black in browsers without `color-mix()` support.
+- Remaining French labels shown while the administration interface was set to English.
+
+## v4.0.1
+
+### Fixed
+- Restored the Profile view HTML structure.
+- Profile now contains only personal preferences.
+- Fixed the Settings crash: `Cannot read properties of null (reading classList)`.
+- Prevented view rendering errors from being reported as Redmine API failures.
+- Aligned the README banner with the official MEP Planner logo.
+- Updated visible and backend version numbers.
+
+## v4.0.0
+
+### Added
+- Modern reports dashboard.
+- SVG release trend chart.
+- Status and notification donut charts.
+- Priority column chart.
+- Environment horizontal bar chart.
+- 7, 30, 90 and 365-day reporting periods.
+- README hero banner.
+
+### Changed
+- Reports API now returns timeline, status breakdown and planning quality.
+- README rewritten and updated in English.
+- Administration translation coverage improved.
+- Application version updated to 4.0.0.
+
+### Fixed
+- Hardcoded English report labels.
+- Multiple French administration labels displayed in English mode.
+
+## v3.6.0
+
+### Added
+- LDAP group mapping
+- JIT provisioning
+- LDAPS CA certificate import
+- LDAP diagnostics
+
+### Changed
+- Redesigned LDAP configuration
+- Improved reports UI
+- Improved translations
+
+### Fixed
+- HTTP 500 on LDAP login
+- Redmine configuration
+- Profile rendering

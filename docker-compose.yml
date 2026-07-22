@@ -1,30 +1,25 @@
 services:
   backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: mep-planner-backend
+    build: ./backend
     restart: unless-stopped
     env_file:
       - .env
     volumes:
-      - mep-state:/app/data
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./backups:/app/backups
       - ./branding:/app/branding:ro
     networks:
       - mep-net
 
   frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-    container_name: mep-planner-frontend
+    build: ./frontend
     restart: unless-stopped
     networks:
       - mep-net
 
   nginx:
     image: nginx:1.27-alpine
-    container_name: mep-planner-nginx
     restart: unless-stopped
     ports:
       - "8080:80"
@@ -40,5 +35,3 @@ networks:
   mep-net:
     driver: bridge
 
-volumes:
-  mep-state:

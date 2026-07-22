@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+mkdir -p data logs backups
 
 echo "=== Installation MEP Planner ==="
 
