@@ -6,7 +6,7 @@
 
 MEP Planner is a self-hosted change and release planning application for operational teams. It centralizes Redmine releases, schedules, notifications, enterprise authentication and reporting in one responsive interface.
 
-## Highlights in v5.0.1
+## Highlights in v5.1.0
 
 - Modern reports dashboard with responsive, dependency-free SVG and CSS charts.
 - Configurable reporting periods: 7, 30, 90 or 365 days.

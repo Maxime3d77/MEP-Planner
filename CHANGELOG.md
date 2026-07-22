@@ -1,6 +1,12 @@
 # Changelog
 
-## 5.0.1 - 2026-07-21
+## 5.1.0
+- Nouveau centre de santé avec score, services, ressources et alertes.
+- Centre de sauvegarde Web : création, historique, téléchargement, import, suppression et restauration.
+- Sauvegarde de sécurité automatique avant restauration.
+- Contrôle des archives importées et protection contre les chemins ZIP dangereux.
+
+## 5.1.0 - 2026-07-21
 
 - Added a dedicated SMTP administration tab with connection testing.
 - Added persistent light/dark logos, favicon and login background assets.
@@ -11,7 +17,7 @@
 - Moved runtime data, logs and backups to persistent host directories.
 
 
-## v5.0.1
+## v5.1.0
 
 ### Fixed
 - Status pie chart now includes in-progress, completed and every other status in the selected reporting window.

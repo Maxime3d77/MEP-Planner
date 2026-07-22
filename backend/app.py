@@ -11,6 +11,10 @@ import ssl
 import secrets
 import time
 import uuid
+import shutil
+import tempfile
+import zipfile
+import platform
 from urllib.parse import quote, urlencode
 from datetime import datetime, timedelta
 from email.message import EmailMessage
@@ -21,7 +25,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, RedirectResponse
+from fastapi.responses import Response, RedirectResponse, FileResponse
 from pydantic import BaseModel, EmailStr
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
@@ -30,7 +34,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-APP_VERSION = "5.0.1"
+APP_VERSION = "5.1.0"
 app = FastAPI(title="MEP Planner API", version=APP_VERSION)
 oidc_states: dict[str, dict[str, Any]] = {}
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -155,6 +159,17 @@ GITHUB_REPOSITORY_URL = os.getenv("GITHUB_REPOSITORY_URL", "https://github.com/M
 GITHUB_API_REPOSITORY = os.getenv("GITHUB_API_REPOSITORY", "Maxime3d77/MEP-Planner").strip()
 GITHUB_CHECK_TIMEOUT_SECONDS = max(3, int(os.getenv("GITHUB_CHECK_TIMEOUT_SECONDS", "8")))
 admin_sessions: dict[str, float] = {}
+
+class BackupCreateRequest(BaseModel):
+    name: str = ""
+    include_logs: bool = False
+
+class RestoreRequest(BaseModel):
+    backup_name: str
+    restore_database: bool = True
+    restore_branding: bool = True
+    restore_settings: bool = True
+    restore_logs: bool = False
 
 class AdminLoginRequest(BaseModel):
     password: str
@@ -1054,21 +1069,160 @@ async def version_check():
     result['update_command'] = './scripts/update.sh'
     return result
 
+def _human_bytes(value: int) -> str:
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(max(0, value))
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
+        size /= 1024
+    return f"{size:.1f} TB"
+
+def _dir_size(path: Path) -> int:
+    total = 0
+    if not path.exists(): return 0
+    for item in path.rglob('*'):
+        try:
+            if item.is_file(): total += item.stat().st_size
+        except OSError: pass
+    return total
+
+def _backup_files() -> list[dict[str, Any]]:
+    rows=[]
+    for item in sorted(BACKUP_DIR.glob('mep-planner-backup-*.zip'), key=lambda x: x.stat().st_mtime, reverse=True):
+        try:
+            rows.append({'name':item.name,'size':item.stat().st_size,'size_human':_human_bytes(item.stat().st_size),'created_at':datetime.fromtimestamp(item.stat().st_mtime,TIMEZONE).isoformat(timespec='seconds')})
+        except OSError: pass
+    return rows
+
+def _safe_backup_path(name: str) -> Path:
+    clean=Path(name).name
+    if clean != name or not clean.startswith('mep-planner-backup-') or not clean.endswith('.zip'):
+        raise HTTPException(400,'Invalid backup name')
+    path=BACKUP_DIR/clean
+    if not path.exists(): raise HTTPException(404,'Backup not found')
+    return path
+
+def _create_backup(name: str='', include_logs: bool=False) -> Path:
+    stamp=now_local().strftime('%Y%m%d-%H%M%S')
+    suffix=re.sub(r'[^A-Za-z0-9_-]+','-',name.strip()).strip('-')[:40]
+    filename=f"mep-planner-backup-{stamp}{('-'+suffix) if suffix else ''}.zip"
+    target=BACKUP_DIR/filename
+    manifest={'format_version':1,'application':'MEP Planner','app_version':APP_VERSION,'created_at':now_local().isoformat(timespec='seconds'),'includes':{'data':True,'branding':True,'logs':include_logs}}
+    with zipfile.ZipFile(target,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
+        for base,label in [(DATA_DIR,'data'),(Path('/app/branding'),'branding')]:
+            if base.exists():
+                for item in base.rglob('*'):
+                    if item.is_file(): archive.write(item,Path(label)/item.relative_to(base))
+        if include_logs and LOG_DIR.exists():
+            for item in LOG_DIR.rglob('*'):
+                if item.is_file(): archive.write(item,Path('logs')/item.relative_to(LOG_DIR))
+        archive.writestr('manifest.json',json.dumps(manifest,ensure_ascii=False,indent=2))
+    digest=hashlib.sha256(target.read_bytes()).hexdigest()
+    with zipfile.ZipFile(target,'a',compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('checksum.sha256',digest+'  '+filename+'\n')
+    return target
+
+def _validate_backup(path: Path) -> dict[str, Any]:
+    try:
+        with zipfile.ZipFile(path) as archive:
+            names=archive.namelist()
+            if 'manifest.json' not in names: raise HTTPException(400,'Missing backup manifest')
+            for name in names:
+                candidate=Path(name)
+                if candidate.is_absolute() or '..' in candidate.parts: raise HTTPException(400,'Unsafe archive path')
+            manifest=json.loads(archive.read('manifest.json'))
+            if manifest.get('application')!='MEP Planner': raise HTTPException(400,'This archive is not a MEP Planner backup')
+            return manifest
+    except zipfile.BadZipFile:
+        raise HTTPException(400,'Invalid ZIP archive')
+
 @app.get('/api/system/health-details')
 async def health_details(authorization: str | None = Header(default=None)):
     require_admin_or_user_admin(authorization)
-    cfg = runtime_config()
-    with db() as con:
-        con.execute('SELECT 1').fetchone()
-    return {
-      'version': APP_VERSION, 'database': 'ok',
-      'smtp': 'configured' if cfg.get('smtp_enabled') and cfg.get('smtp_host') else 'disabled',
-      'ldap': 'configured' if cfg.get('ldap_enabled') else 'disabled',
-      'redmine': 'configured' if cfg.get('redmine_url') else 'disabled',
-      'matrix': 'configured' if branding_settings().get('matrix_enabled') else 'disabled',
-      'last_sync': cache.get('last_sync'), 'last_error': cache.get('error'),
-      'branding_persistent': True, 'env_preserved_by_update': True
-    }
+    cfg=runtime_config(); checks={}; alerts=[]
+    try:
+        with db() as con: con.execute('SELECT 1').fetchone()
+        checks['database']={'status':'ok','label':'Base de données'}
+    except Exception as exc:
+        checks['database']={'status':'error','label':'Base de données','detail':str(exc)}; alerts.append('Base de données inaccessible')
+    checks['api']={'status':'ok','label':'API'}
+    checks['scheduler']={'status':'ok','label':'Planificateur'}
+    for key,enabled,label in [('smtp',bool(cfg.get('smtp_enabled') and cfg.get('smtp_host')),'SMTP'),('ldap',bool(cfg.get('ldap_enabled')),'LDAP'),('redmine',bool(cfg.get('redmine_url')),'Redmine'),('matrix',bool(branding_settings().get('matrix_enabled')),'Matrix')]:
+        checks[key]={'status':'configured' if enabled else 'disabled','label':label}
+    disk=shutil.disk_usage(DATA_DIR); disk_percent=round((disk.used/disk.total)*100,1) if disk.total else 0
+    if disk_percent>=90: alerts.append('Espace disque critique')
+    backups=_backup_files(); last_backup=backups[0] if backups else None
+    if not backups: alerts.append('Aucune sauvegarde disponible')
+    score=100
+    score-=sum(20 for c in checks.values() if c['status']=='error')
+    if not backups: score-=10
+    if disk_percent>=90: score-=20
+    elif disk_percent>=80: score-=10
+    if cache.get('error'): score-=10; alerts.append('Dernière synchronisation Redmine en erreur')
+    uptime=None
+    try:
+        uptime=int(float(Path('/proc/uptime').read_text().split()[0]))
+    except Exception: pass
+    return {'status':'ok' if score>=80 else ('warning' if score>=50 else 'error'),'score':max(0,score),'version':APP_VERSION,'checks':checks,'resources':{'disk_percent':disk_percent,'disk_used':_human_bytes(disk.used),'disk_total':_human_bytes(disk.total),'database_size':_human_bytes(DB_FILE.stat().st_size if DB_FILE.exists() else 0),'backups_size':_human_bytes(_dir_size(BACKUP_DIR)),'backup_count':len(backups),'uptime_seconds':uptime,'platform':platform.system()},'last_backup':last_backup,'last_sync':cache.get('last_sync'),'last_error':cache.get('error'),'alerts':alerts}
+
+@app.get('/api/backups')
+async def list_backups(authorization: str | None = Header(default=None)):
+    require_admin_or_user_admin(authorization)
+    return {'backups':_backup_files(),'directory':str(BACKUP_DIR)}
+
+@app.post('/api/backups')
+async def create_backup(payload: BackupCreateRequest, authorization: str | None = Header(default=None)):
+    require_admin_or_user_admin(authorization)
+    path=await asyncio.to_thread(_create_backup,payload.name,payload.include_logs)
+    return {'created':True,'backup':next(x for x in _backup_files() if x['name']==path.name)}
+
+@app.get('/api/backups/{name}/download')
+async def download_backup(name: str, authorization: str | None = Header(default=None)):
+    require_admin_or_user_admin(authorization)
+    path=_safe_backup_path(name)
+    return FileResponse(path,media_type='application/zip',filename=path.name)
+
+@app.delete('/api/backups/{name}')
+async def delete_backup(name: str, authorization: str | None = Header(default=None)):
+    require_admin_or_user_admin(authorization); path=_safe_backup_path(name); path.unlink(); return {'deleted':True}
+
+@app.post('/api/backups/import')
+async def import_backup(file: UploadFile = File(...), authorization: str | None = Header(default=None)):
+    require_admin_or_user_admin(authorization)
+    if not file.filename or not file.filename.lower().endswith('.zip'): raise HTTPException(400,'A ZIP file is required')
+    stamp=now_local().strftime('%Y%m%d-%H%M%S'); target=BACKUP_DIR/f'mep-planner-backup-{stamp}-imported.zip'
+    total=0
+    with target.open('wb') as output:
+        while chunk:=await file.read(1024*1024):
+            total+=len(chunk)
+            if total>512*1024*1024: target.unlink(missing_ok=True); raise HTTPException(413,'Backup exceeds 512 MB')
+            output.write(chunk)
+    try: manifest=_validate_backup(target)
+    except Exception: target.unlink(missing_ok=True); raise
+    return {'imported':True,'name':target.name,'manifest':manifest}
+
+@app.post('/api/backups/restore')
+async def restore_backup(payload: RestoreRequest, authorization: str | None = Header(default=None)):
+    require_admin_or_user_admin(authorization); source=_safe_backup_path(payload.backup_name); manifest=_validate_backup(source)
+    safety=await asyncio.to_thread(_create_backup,'before-restore',False)
+    with tempfile.TemporaryDirectory(prefix='mep-restore-') as tmp:
+        root=Path(tmp)
+        with zipfile.ZipFile(source) as archive: archive.extractall(root)
+        if payload.restore_database and (root/'data'/DB_FILE.name).exists(): shutil.copy2(root/'data'/DB_FILE.name,DB_FILE)
+        if payload.restore_settings:
+            for name in ['issues_state.json']:
+                src=root/'data'/name
+                if src.exists(): shutil.copy2(src,DATA_DIR/name)
+        if payload.restore_branding:
+            src=root/'data'/'branding'
+            if src.exists():
+                if BRANDING_DIR.exists(): shutil.rmtree(BRANDING_DIR)
+                shutil.copytree(src,BRANDING_DIR)
+        if payload.restore_logs and (root/'logs').exists():
+            LOG_DIR.mkdir(parents=True,exist_ok=True)
+            shutil.copytree(root/'logs',LOG_DIR,dirs_exist_ok=True)
+    return {'restored':True,'manifest':manifest,'safety_backup':safety.name,'restart_required':True}
 
 @app.get('/api/settings')
 async def get_settings(authorization: str | None = Header(default=None)):
