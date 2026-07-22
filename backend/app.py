@@ -34,7 +34,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-APP_VERSION = "5.1.1"
+APP_VERSION = "5.1.2"
 app = FastAPI(title="MEP Planner API", version=APP_VERSION)
 oidc_states: dict[str, dict[str, Any]] = {}
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -1148,7 +1148,7 @@ async def health_details(authorization: str | None = Header(default=None)):
         checks['database']={'status':'error','label':'Base de données','detail':str(exc)}; alerts.append('Base de données inaccessible')
     checks['api']={'status':'ok','label':'API'}
     checks['scheduler']={'status':'ok','label':'Planificateur'}
-    for key,enabled,label in [('smtp',bool(cfg.get('smtp_enabled') and cfg.get('smtp_host')),'SMTP'),('ldap',bool(cfg.get('ldap_enabled')),'LDAP'),('redmine',bool(cfg.get('redmine_url')),'Redmine'),('matrix',bool(branding_settings().get('matrix_enabled')),'Matrix')]:
+    for key,enabled,label in [('smtp',bool(cfg.get('smtp_enabled') and cfg.get('smtp_host')),'SMTP'),('ldap',bool(cfg.get('ldap_enabled')),'LDAP'),('redmine',bool(cfg.get('redmine_url')),'Redmine')]:
         checks[key]={'status':'configured' if enabled else 'disabled','label':label}
     disk=shutil.disk_usage(DATA_DIR); disk_percent=round((disk.used/disk.total)*100,1) if disk.total else 0
     if disk_percent>=90: alerts.append('Espace disque critique')
