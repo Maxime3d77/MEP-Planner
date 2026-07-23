@@ -34,7 +34,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-APP_VERSION = "5.1.2"
+APP_VERSION = "5.1.4"
 app = FastAPI(title="MEP Planner API", version=APP_VERSION)
 oidc_states: dict[str, dict[str, Any]] = {}
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -1091,7 +1091,14 @@ def _backup_files() -> list[dict[str, Any]]:
     rows=[]
     for item in sorted(BACKUP_DIR.glob('mep-planner-backup-*.zip'), key=lambda x: x.stat().st_mtime, reverse=True):
         try:
-            rows.append({'name':item.name,'size':item.stat().st_size,'size_human':_human_bytes(item.stat().st_size),'created_at':datetime.fromtimestamp(item.stat().st_mtime,TIMEZONE).isoformat(timespec='seconds')})
+            manifest_version=None
+            try:
+                with zipfile.ZipFile(item) as archive:
+                    if 'manifest.json' in archive.namelist():
+                        manifest_version=json.loads(archive.read('manifest.json')).get('app_version')
+            except Exception:
+                pass
+            rows.append({'name':item.name,'size':item.stat().st_size,'size_human':_human_bytes(item.stat().st_size),'created_at':datetime.fromtimestamp(item.stat().st_mtime,TIMEZONE).isoformat(timespec='seconds'),'app_version':manifest_version})
         except OSError: pass
     return rows
 
@@ -1164,7 +1171,7 @@ async def health_details(authorization: str | None = Header(default=None)):
     try:
         uptime=int(float(Path('/proc/uptime').read_text().split()[0]))
     except Exception: pass
-    return {'status':'ok' if score>=80 else ('warning' if score>=50 else 'error'),'score':max(0,score),'version':APP_VERSION,'checks':checks,'resources':{'disk_percent':disk_percent,'disk_used':_human_bytes(disk.used),'disk_total':_human_bytes(disk.total),'database_size':_human_bytes(DB_FILE.stat().st_size if DB_FILE.exists() else 0),'backups_size':_human_bytes(_dir_size(BACKUP_DIR)),'backup_count':len(backups),'uptime_seconds':uptime,'platform':platform.system()},'last_backup':last_backup,'last_sync':cache.get('last_sync'),'last_error':cache.get('error'),'alerts':alerts}
+    return {'status':'ok' if score>=80 else ('warning' if score>=50 else 'error'),'score':max(0,score),'version':APP_VERSION,'checks':checks,'resources':{'disk_percent':disk_percent,'disk_used':_human_bytes(disk.used),'disk_total':_human_bytes(disk.total),'database_size':_human_bytes(DB_FILE.stat().st_size if DB_FILE.exists() else 0),'backups_size':_human_bytes(_dir_size(BACKUP_DIR)),'backup_count':len(backups),'uptime_seconds':uptime,'platform':platform.system()},'last_backup':last_backup,'refreshed_at':now_local().isoformat(timespec='seconds'),'last_sync':cache.get('last_sync'),'last_error':cache.get('error'),'alerts':alerts}
 
 @app.get('/api/backups')
 async def list_backups(authorization: str | None = Header(default=None)):
