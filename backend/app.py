@@ -34,7 +34,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-APP_VERSION = "5.2.0"
+APP_VERSION = "5.2.2"
 app = FastAPI(title="MEP Planner API", version=APP_VERSION)
 oidc_states: dict[str, dict[str, Any]] = {}
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -50,6 +50,9 @@ ROLLOUT_LOGGER_ENABLED_DEFAULT = os.getenv("ROLLOUT_LOGGER_ENABLED", "false").lo
 ROLLOUT_LOGGER_URL_DEFAULT = os.getenv("ROLLOUT_LOGGER_URL", "").strip().rstrip("/")
 ROLLOUT_LOGGER_VERIFY_TLS_DEFAULT = os.getenv("ROLLOUT_LOGGER_VERIFY_TLS", "true").lower() == "true"
 ROLLOUT_LOGGER_TIMEOUT_DEFAULT = max(3, int(os.getenv("ROLLOUT_LOGGER_TIMEOUT_SECONDS", "15")))
+ROLLOUT_LOGGER_POLL_INTERVAL_DEFAULT = max(30, int(os.getenv("ROLLOUT_LOGGER_POLL_INTERVAL_SECONDS", "60")))
+ROLLOUT_LOGGER_NOTIFY_EMAIL_DEFAULT = os.getenv("ROLLOUT_LOGGER_NOTIFY_EMAIL", "true").lower() == "true"
+ROLLOUT_LOGGER_NOTIFY_MATRIX_DEFAULT = os.getenv("ROLLOUT_LOGGER_NOTIFY_MATRIX", "true").lower() == "true"
 ALLOW_DEMO = os.getenv("ALLOW_DEMO", "false").lower() == "true"
 POLL_INTERVAL = max(60, int(os.getenv("POLL_INTERVAL_SECONDS", "300")))
 MAX_REDMINE_PAGES = max(1, int(os.getenv("MAX_REDMINE_PAGES", "50")))
@@ -225,6 +228,9 @@ class InfrastructureSettings(BaseModel):
     rollout_logger_url: str = ""
     rollout_logger_verify_tls: bool = True
     rollout_logger_timeout_seconds: int = 15
+    rollout_logger_poll_interval_seconds: int = 60
+    rollout_logger_notify_email: bool = True
+    rollout_logger_notify_matrix: bool = True
     smtp_enabled: bool = False
     smtp_host: str = ""
     smtp_port: int = 25
@@ -373,6 +379,9 @@ def runtime_config() -> dict[str, Any]:
         "rollout_logger_url": get_setting("rollout_logger_url", ROLLOUT_LOGGER_URL_DEFAULT).rstrip("/"),
         "rollout_logger_verify_tls": bool_setting("rollout_logger_verify_tls", ROLLOUT_LOGGER_VERIFY_TLS_DEFAULT),
         "rollout_logger_timeout_seconds": int_setting("rollout_logger_timeout_seconds", ROLLOUT_LOGGER_TIMEOUT_DEFAULT),
+        "rollout_logger_poll_interval_seconds": max(30, int_setting("rollout_logger_poll_interval_seconds", ROLLOUT_LOGGER_POLL_INTERVAL_DEFAULT)),
+        "rollout_logger_notify_email": bool_setting("rollout_logger_notify_email", ROLLOUT_LOGGER_NOTIFY_EMAIL_DEFAULT),
+        "rollout_logger_notify_matrix": bool_setting("rollout_logger_notify_matrix", ROLLOUT_LOGGER_NOTIFY_MATRIX_DEFAULT),
         "smtp_enabled": bool_setting("smtp_enabled", SMTP_ENABLED),
         "smtp_host": get_setting("smtp_host", SMTP_HOST),
         "smtp_port": int(get_setting("smtp_port", str(SMTP_PORT))),
@@ -554,6 +563,23 @@ def init_db() -> None:
           ON notifications(issue_id, issue_version, notification_type, recipient_key)
           WHERE manual = 0 AND status = 'sent';
         CREATE INDEX IF NOT EXISTS idx_notification_issue ON notifications(issue_id, sent_at DESC);
+        CREATE TABLE IF NOT EXISTS rollout_events (
+          fingerprint TEXT PRIMARY KEY,
+          project TEXT NOT NULL DEFAULT '',
+          environment TEXT NOT NULL DEFAULT '',
+          version TEXT NOT NULL DEFAULT '',
+          requester TEXT NOT NULL DEFAULT '',
+          rollout_date TEXT NOT NULL DEFAULT '',
+          first_seen_at TEXT NOT NULL,
+          email_status TEXT NOT NULL DEFAULT 'pending',
+          email_sent_at TEXT,
+          email_error TEXT NOT NULL DEFAULT '',
+          matrix_status TEXT NOT NULL DEFAULT 'pending',
+          matrix_sent_at TEXT,
+          matrix_event_id TEXT NOT NULL DEFAULT '',
+          matrix_error TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_rollout_events_seen ON rollout_events(first_seen_at DESC);
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           username TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -1026,7 +1052,7 @@ async def daily_mailer():
             await maybe_matrix(issue, 'daily')
 
 @app.on_event('startup')
-async def startup():init_db();asyncio.create_task(watcher());asyncio.create_task(daily_mailer())
+async def startup():init_db();asyncio.create_task(watcher());asyncio.create_task(daily_mailer());asyncio.create_task(rollout_watcher())
 
 @app.get('/api/health')
 async def health():return {'status':'ok','version':APP_VERSION,'mode':cache['mode'],'syncing':sync_lock.locked(),'last_sync':cache['last_sync'],'last_attempt':cache['last_attempt'],'pages_read':cache['pages_read'],'tickets_read':cache['tickets_read'],'mep_count':len(cache.get('issues',[])),'error':cache['error']}
@@ -1070,7 +1096,119 @@ async def fetch_rollouts(params: dict[str, Any] | None = None) -> list[dict[str,
         raise
     except Exception as exc:
         log_event("rollout_logger", "error", "Rollout Logger query failed", f"{type(exc).__name__}: {exc}")
-        raise HTTPException(502, f"Rollout Logger unavailable: {exc}")
+        raise
+
+def rollout_fingerprint(rollout: dict[str, Any]) -> str:
+    identity = "\x1f".join(str(rollout.get(key) or "").strip() for key in ("project", "environment", "version", "requester", "date"))
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+def rollout_subject(rollout: dict[str, Any], lang: str | None = None) -> str:
+    lang = lang or communication_language()
+    return f"{tr('Nouveau déploiement Rollout Logger','New Rollout Logger deployment',lang)} — {rollout.get('project') or '—'} {rollout.get('version') or ''}".strip()
+
+def rollout_email_html(rollout: dict[str, Any], lang: str | None = None) -> str:
+    lang = lang or communication_language()
+    labels = {
+        "project": tr("Projet", "Project", lang), "environment": tr("Environnement", "Environment", lang),
+        "version": tr("Version", "Version", lang), "requester": tr("Demandeur", "Requester", lang),
+        "date": tr("Date du déploiement", "Deployment date", lang),
+    }
+    rows = "".join(f'<tr><td style="padding:7px 18px 7px 0;color:#64748b">{html.escape(labels[key])}</td><td style="padding:7px 0"><strong>{html.escape(str(rollout.get(key) or "—"))}</strong></td></tr>' for key in ("project","environment","version","requester","date"))
+    base = app_public_url()
+    history_link = f'<p style="margin-top:18px"><a href="{html.escape(base, quote=True)}" style="color:#5b7cfa">MEP Planner — {tr("Historique des MEP","Release history",lang)}</a></p>' if base else ""
+    return f"""<div style="font-family:Arial,sans-serif;max-width:680px;margin:auto;color:#0f172a">
+<div style="border-left:5px solid #2563eb;padding:14px 18px;background:#eff6ff;border-radius:8px">
+<h2 style="margin:0 0 8px">🚀 {html.escape(tr("Nouveau déploiement détecté","New deployment detected",lang))}</h2>
+<p style="margin:0">{html.escape(tr("Rollout Logger vient d'enregistrer une nouvelle mise en production.","Rollout Logger has recorded a new deployment.",lang))}</p>
+<table style="margin-top:14px;border-collapse:collapse">{rows}</table>{history_link}
+</div></div>"""
+
+def rollout_matrix_message(rollout: dict[str, Any], lang: str | None = None) -> tuple[str, str]:
+    lang = lang or communication_language()
+    heading = tr("Nouveau déploiement Rollout Logger", "New Rollout Logger deployment", lang)
+    project = rollout.get("project") or "—"; version = rollout.get("version") or "—"; environment = rollout.get("environment") or "—"
+    plain = f"🚀 {heading} — {project} {version} | {environment} | {rollout.get('requester') or '—'} | {rollout.get('date') or '—'}"
+    fields = [(tr("Projet","Project",lang),project),(tr("Environnement","Environment",lang),environment),(tr("Version","Version",lang),version),(tr("Demandeur","Requester",lang),rollout.get("requester") or "—"),(tr("Date","Date",lang),rollout.get("date") or "—")]
+    rows = "".join(f'<tr><td style="padding:4px 14px 4px 0;color:#94a3b8">{html.escape(str(k))}</td><td style="padding:4px 0"><b>{html.escape(str(v))}</b></td></tr>' for k,v in fields)
+    formatted = f'<div style="border-left:5px solid #2563eb;padding:12px 16px;background:#111827;border-radius:8px"><div style="font-size:18px"><b>🚀 {html.escape(heading)}</b></div><table style="margin-top:10px">{rows}</table></div>'
+    return plain, formatted
+
+async def send_rollout_matrix(rollout: dict[str, Any]) -> str:
+    cfg = matrix_config()
+    if not cfg["enabled"]: raise RuntimeError("Matrix is disabled")
+    if not cfg["homeserver"] or not cfg["access_token"] or not cfg["room_id"]: raise RuntimeError("Matrix configuration is incomplete")
+    body, formatted = rollout_matrix_message(rollout)
+    txn_id = f"rollout-{rollout_fingerprint(rollout)[:16]}-{int(time.time()*1000)}"
+    room = quote(cfg["room_id"], safe="")
+    url = f'{cfg["homeserver"]}/_matrix/client/v3/rooms/{room}/send/m.room.message/{txn_id}'
+    headers = {"Authorization": f'Bearer {cfg["access_token"]}', "Content-Type":"application/json"}
+    payload = {"msgtype":"m.notice", "body":body, "format":"org.matrix.custom.html", "formatted_body":formatted}
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        response = await client.put(url, headers=headers, json=payload); response.raise_for_status(); data=response.json()
+    return str(data.get("event_id") or "")
+
+def register_rollouts(records: list[dict[str, Any]], baseline: bool = False) -> int:
+    inserted = 0
+    now = now_local().isoformat(timespec="seconds")
+    with db() as con:
+        for rollout in records:
+            fp = rollout_fingerprint(rollout)
+            email_status = "baseline" if baseline else "pending"
+            matrix_status = "baseline" if baseline else "pending"
+            cur=con.execute("INSERT OR IGNORE INTO rollout_events(fingerprint,project,environment,version,requester,rollout_date,first_seen_at,email_status,matrix_status) VALUES(?,?,?,?,?,?,?,?,?)",
+                (fp,rollout.get("project", ""),rollout.get("environment", ""),rollout.get("version", ""),rollout.get("requester", ""),rollout.get("date", ""),now,email_status,matrix_status))
+            inserted += cur.rowcount
+    return inserted
+
+def pending_rollout_events(limit: int = 100) -> list[dict[str, Any]]:
+    with db() as con:
+        rows=con.execute("SELECT * FROM rollout_events WHERE email_status IN ('pending','error') OR matrix_status IN ('pending','error') ORDER BY first_seen_at ASC LIMIT ?",(limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+async def process_rollout_notifications() -> None:
+    cfg = runtime_config(); recipients=[v.strip() for v in str(cfg.get("smtp_recipients") or "").split(";") if v.strip()]
+    for event in pending_rollout_events():
+        rollout={"project":event["project"],"environment":event["environment"],"version":event["version"],"requester":event["requester"],"date":event["rollout_date"]}
+        if event["email_status"] in {"pending","error"}:
+            if not cfg.get("rollout_logger_notify_email"):
+                with db() as con: con.execute("UPDATE rollout_events SET email_status='disabled',email_error='' WHERE fingerprint=?",(event["fingerprint"],))
+            elif cfg.get("smtp_enabled") and recipients:
+                try:
+                    message_id=await asyncio.to_thread(smtp_send,rollout_subject(rollout),rollout_email_html(rollout),recipients)
+                    with db() as con: con.execute("UPDATE rollout_events SET email_status='sent',email_sent_at=?,email_error='' WHERE fingerprint=?",(now_local().isoformat(timespec='seconds'),event["fingerprint"]))
+                    log_event("rollout_logger","success","Rollout email notification sent",f"{rollout['project']} {rollout['version']} -> {';'.join(recipients)}")
+                except Exception as exc:
+                    with db() as con: con.execute("UPDATE rollout_events SET email_status='error',email_error=? WHERE fingerprint=?",(str(exc),event["fingerprint"]))
+                    log_event("rollout_logger","error","Rollout email notification failed",f"{type(exc).__name__}: {exc}")
+        if event["matrix_status"] in {"pending","error"}:
+            if not cfg.get("rollout_logger_notify_matrix"):
+                with db() as con: con.execute("UPDATE rollout_events SET matrix_status='disabled',matrix_error='' WHERE fingerprint=?",(event["fingerprint"],))
+            elif matrix_config().get("enabled"):
+                try:
+                    event_id=await send_rollout_matrix(rollout)
+                    with db() as con: con.execute("UPDATE rollout_events SET matrix_status='sent',matrix_sent_at=?,matrix_event_id=?,matrix_error='' WHERE fingerprint=?",(now_local().isoformat(timespec='seconds'),event_id,event["fingerprint"]))
+                    log_event("rollout_logger","success","Rollout Matrix notification sent",f"{rollout['project']} {rollout['version']} -> {matrix_config().get('room_id','')}")
+                except Exception as exc:
+                    with db() as con: con.execute("UPDATE rollout_events SET matrix_status='error',matrix_error=? WHERE fingerprint=?",(str(exc),event["fingerprint"]))
+                    log_event("rollout_logger","error","Rollout Matrix notification failed",f"{type(exc).__name__}: {exc}")
+
+async def rollout_watcher() -> None:
+    initialized = False
+    while True:
+        cfg=runtime_config()
+        if cfg.get("rollout_logger_enabled") and cfg.get("rollout_logger_url"):
+            try:
+                records=await fetch_rollouts({"limit":100,"offset":0})
+                with db() as con: total=con.execute("SELECT COUNT(*) AS c FROM rollout_events").fetchone()["c"]
+                baseline = (total == 0 and not initialized)
+                inserted=register_rollouts(records,baseline=baseline)
+                if baseline: log_event("rollout_logger","info","Notification baseline initialized",f"{inserted} existing rollouts registered without notification")
+                elif inserted: log_event("rollout_logger","info","New rollouts detected",str(inserted))
+                initialized=True
+                await process_rollout_notifications()
+            except Exception as exc:
+                log_event("rollout_logger","error","Rollout notification watcher failed",f"{type(exc).__name__}: {exc}")
+        await asyncio.sleep(max(30,int(cfg.get("rollout_logger_poll_interval_seconds") or 60)))
 
 @app.get('/api/rollouts')
 async def rollout_history(

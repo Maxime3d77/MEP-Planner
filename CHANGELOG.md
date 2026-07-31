@@ -1,3 +1,24 @@
+# Changelog
+
+## 5.2.2
+
+### Changed
+
+- Published the Rollout Logger notification feature as version 5.2.2.
+- New Rollout Logger deployments trigger the configured email and Matrix notifications.
+- Existing Rollout Logger history remains ignored during first synchronization to prevent notification flooding.
+- Persistent deduplication continues to prevent duplicate notifications after application restarts.
+
+## 5.2.1
+
+### Added
+- Automatic detection of every new Rollout Logger deployment.
+- Email notification to configured SMTP recipients for every new rollout.
+- Matrix notification to the configured room for every new rollout.
+- Persistent duplicate protection and automatic retry after delivery errors.
+- Configurable notification polling interval and channel switches.
+- Safe initial baseline to avoid sending the existing Rollout Logger history.
+
 # 5.2.0
 
 ## Added
@@ -9,7 +30,6 @@
 - Redmine remains the source for planning and completed MEP tickets.
 - Existing Redmine synchronization, statuses and history behavior are preserved.
 
-# Changelog
 
 All notable changes to MEP Planner are documented in this file.
 
