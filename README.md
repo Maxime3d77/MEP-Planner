@@ -5,7 +5,7 @@
 <h1 align="center">MEP Planner</h1>
 <p align="center"><strong>Plan smarter. Deploy with confidence.</strong></p>
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-5.1.4-4ade80">
+  <img alt="Version" src="https://img.shields.io/badge/version-5.2.0-4ade80">
   <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-blue">
   <img alt="Docker" src="https://img.shields.io/badge/deployment-Docker-2496ED">
   <img alt="Languages" src="https://img.shields.io/badge/UI-FR%20%7C%20EN-8b5cf6">
@@ -76,3 +76,8 @@ MEP Planner is licensed under the [GNU General Public License v3.0](LICENSE).
 ## Support
 
 Report reproducible issues through the GitHub issue tracker and include the application version, browser, deployment method and relevant sanitized logs.
+
+
+## Rollout Logger
+
+MEP Planner can optionally display Rollout Logger deployments alongside completed Redmine tickets in the unified Release History. Redmine behavior remains unchanged. See `docs/rollout-logger.md`.

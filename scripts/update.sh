@@ -42,6 +42,18 @@ rsync -a --delete \
   "$NEW_ROOT/" "$ROOT_DIR/"
 mkdir -p data logs backups
 
+# Ajoute les nouvelles variables de configuration sans modifier les valeurs existantes.
+if [[ -f .env ]]; then
+  grep -q '^ROLLOUT_LOGGER_ENABLED=' .env || cat >> .env <<'EOF'
+
+# Rollout Logger (source complémentaire de l’historique des MEP)
+ROLLOUT_LOGGER_ENABLED=false
+ROLLOUT_LOGGER_URL=http://rollout-logger.edd
+ROLLOUT_LOGGER_VERIFY_TLS=true
+ROLLOUT_LOGGER_TIMEOUT_SECONDS=15
+EOF
+fi
+
 printf '5/7 Reconstruction des conteneurs…\n'
 docker compose build --pull
 docker compose up -d --remove-orphans

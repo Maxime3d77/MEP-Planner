@@ -34,7 +34,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-APP_VERSION = "5.1.4"
+APP_VERSION = "5.2.0"
 app = FastAPI(title="MEP Planner API", version=APP_VERSION)
 oidc_states: dict[str, dict[str, Any]] = {}
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -46,6 +46,10 @@ TAG_VALUE = os.getenv("REDMINE_TAG_VALUE", "MEP").strip()
 ENV_FIELD = os.getenv("REDMINE_ENV_FIELD", "Environnement").strip()
 START_TIME_FIELD = os.getenv("REDMINE_START_TIME_FIELD", "Heure de début").strip()
 END_TIME_FIELD = os.getenv("REDMINE_END_TIME_FIELD", "Heure de fin").strip()
+ROLLOUT_LOGGER_ENABLED_DEFAULT = os.getenv("ROLLOUT_LOGGER_ENABLED", "false").lower() == "true"
+ROLLOUT_LOGGER_URL_DEFAULT = os.getenv("ROLLOUT_LOGGER_URL", "").strip().rstrip("/")
+ROLLOUT_LOGGER_VERIFY_TLS_DEFAULT = os.getenv("ROLLOUT_LOGGER_VERIFY_TLS", "true").lower() == "true"
+ROLLOUT_LOGGER_TIMEOUT_DEFAULT = max(3, int(os.getenv("ROLLOUT_LOGGER_TIMEOUT_SECONDS", "15")))
 ALLOW_DEMO = os.getenv("ALLOW_DEMO", "false").lower() == "true"
 POLL_INTERVAL = max(60, int(os.getenv("POLL_INTERVAL_SECONDS", "300")))
 MAX_REDMINE_PAGES = max(1, int(os.getenv("MAX_REDMINE_PAGES", "50")))
@@ -217,6 +221,10 @@ class InfrastructureSettings(BaseModel):
     redmine_timeout_seconds: int = 20
     poll_interval_seconds: int = 300
     max_redmine_pages: int = 50
+    rollout_logger_enabled: bool = False
+    rollout_logger_url: str = ""
+    rollout_logger_verify_tls: bool = True
+    rollout_logger_timeout_seconds: int = 15
     smtp_enabled: bool = False
     smtp_host: str = ""
     smtp_port: int = 25
@@ -361,6 +369,10 @@ def runtime_config() -> dict[str, Any]:
         "redmine_timeout_seconds": int(get_setting("redmine_timeout_seconds", "20")),
         "poll_interval_seconds": int(get_setting("poll_interval_seconds", str(POLL_INTERVAL))),
         "max_redmine_pages": int(get_setting("max_redmine_pages", str(MAX_REDMINE_PAGES))),
+        "rollout_logger_enabled": bool_setting("rollout_logger_enabled", ROLLOUT_LOGGER_ENABLED_DEFAULT),
+        "rollout_logger_url": get_setting("rollout_logger_url", ROLLOUT_LOGGER_URL_DEFAULT).rstrip("/"),
+        "rollout_logger_verify_tls": bool_setting("rollout_logger_verify_tls", ROLLOUT_LOGGER_VERIFY_TLS_DEFAULT),
+        "rollout_logger_timeout_seconds": int_setting("rollout_logger_timeout_seconds", ROLLOUT_LOGGER_TIMEOUT_DEFAULT),
         "smtp_enabled": bool_setting("smtp_enabled", SMTP_ENABLED),
         "smtp_host": get_setting("smtp_host", SMTP_HOST),
         "smtp_port": int(get_setting("smtp_port", str(SMTP_PORT))),
@@ -1019,6 +1031,61 @@ async def startup():init_db();asyncio.create_task(watcher());asyncio.create_task
 @app.get('/api/health')
 async def health():return {'status':'ok','version':APP_VERSION,'mode':cache['mode'],'syncing':sync_lock.locked(),'last_sync':cache['last_sync'],'last_attempt':cache['last_attempt'],'pages_read':cache['pages_read'],'tickets_read':cache['tickets_read'],'mep_count':len(cache.get('issues',[])),'error':cache['error']}
 
+
+def normalize_rollout(raw: dict[str, Any], index: int = 0) -> dict[str, Any]:
+    """Normalize rollout-logger records without changing Redmine data."""
+    date_value = raw.get("date") or raw.get("created_at") or raw.get("timestamp") or raw.get("recorded_at") or ""
+    return {
+        "id": raw.get("id") or f"rollout-{index}-{hashlib.sha1(json.dumps(raw, sort_keys=True, default=str).encode()).hexdigest()[:10]}",
+        "source": "rollout_logger",
+        "project": str(raw.get("project") or ""),
+        "environment": str(raw.get("environment") or ""),
+        "version": str(raw.get("version") or ""),
+        "requester": str(raw.get("requester") or ""),
+        "date": str(date_value),
+    }
+
+async def fetch_rollouts(params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    cfg = runtime_config()
+    if not cfg.get("rollout_logger_enabled"):
+        return []
+    base = str(cfg.get("rollout_logger_url") or "").rstrip("/")
+    if not base:
+        raise HTTPException(503, "Rollout Logger is enabled but its URL is not configured")
+    query = {k: v for k, v in (params or {}).items() if v not in (None, "")}
+    try:
+        async with httpx.AsyncClient(
+            timeout=cfg["rollout_logger_timeout_seconds"],
+            verify=cfg["rollout_logger_verify_tls"],
+            follow_redirects=True,
+        ) as client:
+            response = await client.get(base + "/data.json", params=query)
+            response.raise_for_status()
+            payload = response.json()
+        records = payload.get("rollouts", []) if isinstance(payload, dict) else []
+        if not isinstance(records, list):
+            raise ValueError("Invalid Rollout Logger response: 'rollouts' must be a list")
+        return [normalize_rollout(item, idx) for idx, item in enumerate(records) if isinstance(item, dict)]
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log_event("rollout_logger", "error", "Rollout Logger query failed", f"{type(exc).__name__}: {exc}")
+        raise HTTPException(502, f"Rollout Logger unavailable: {exc}")
+
+@app.get('/api/rollouts')
+async def rollout_history(
+    project: str = Query(""),
+    environment: str = Query(""),
+    requester: str = Query(""),
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    cfg = runtime_config()
+    if not cfg.get("rollout_logger_enabled"):
+        return {"enabled": False, "rollouts": [], "limit": limit, "offset": offset, "has_more": False}
+    records = await fetch_rollouts({"project": project, "environment": environment, "requester": requester, "limit": limit, "offset": offset})
+    return {"enabled": True, "rollouts": records, "limit": limit, "offset": offset, "has_more": len(records) == limit}
+
 @app.get('/api/issues')
 async def issues(authorization: str | None = Header(default=None)):
     current_user(authorization)
@@ -1339,7 +1406,7 @@ async def get_admin_configuration(authorization: str | None = Header(default=Non
 async def admin_logs(system: str = Query('redmine'), limit: int = Query(200, ge=1, le=1000), authorization: str | None = Header(default=None)):
     require_admin_or_user_admin(authorization)
     selected = (system or 'redmine').lower()
-    allowed = {'redmine','smtp','matrix','ldap','oidc','authentication','application'}
+    allowed = {'redmine','rollout_logger','smtp','matrix','ldap','oidc','authentication','application'}
     if selected not in allowed:
         raise HTTPException(400, 'Unsupported log type')
     if selected == 'smtp':
@@ -1377,6 +1444,18 @@ async def test_redmine_configuration(authorization: str | None = Header(default=
     except Exception as exc:
         log_event('redmine','error','Connection test failed', f'{type(exc).__name__}: {exc}')
         raise HTTPException(502,str(exc))
+
+@app.post('/api/admin/rollout-logger/test')
+async def test_rollout_logger_configuration(authorization: str | None = Header(default=None)):
+    require_admin_or_user_admin(authorization)
+    cfg = runtime_config()
+    if not cfg.get("rollout_logger_enabled"):
+        raise HTTPException(400, "Enable Rollout Logger before testing")
+    if not cfg.get("rollout_logger_url"):
+        raise HTTPException(400, "Rollout Logger URL is required")
+    records = await fetch_rollouts({"limit": 1, "offset": 0})
+    log_event("rollout_logger", "success", "Connection test successful", cfg["rollout_logger_url"])
+    return {"ok": True, "status": "connected", "server": cfg["rollout_logger_url"], "records_read": len(records)}
 
 @app.post('/api/admin/smtp/test')
 async def test_smtp_configuration(authorization: str | None = Header(default=None)):

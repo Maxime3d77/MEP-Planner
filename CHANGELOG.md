@@ -1,3 +1,14 @@
+# 5.2.0
+
+## Added
+- Optional Rollout Logger source configured from `.env` or the administration interface.
+- Unified MEP history combining completed Redmine tickets and completed Rollout Logger deployments.
+- Rollout Logger connection test, filtering proxy, pagination and logs.
+
+## Unchanged
+- Redmine remains the source for planning and completed MEP tickets.
+- Existing Redmine synchronization, statuses and history behavior are preserved.
+
 # Changelog
 
 All notable changes to MEP Planner are documented in this file.
