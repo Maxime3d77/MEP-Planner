@@ -34,7 +34,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-APP_VERSION = "5.2.0"
+APP_VERSION = "5.3.1"
 app = FastAPI(title="MEP Planner API", version=APP_VERSION)
 oidc_states: dict[str, dict[str, Any]] = {}
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -43,6 +43,7 @@ REDMINE_URL = os.getenv("REDMINE_URL", "").rstrip("/")
 REDMINE_API_KEY = os.getenv("REDMINE_API_KEY", "")
 TAG_FIELD = os.getenv("REDMINE_TAG_FIELD", "Tag").strip()
 TAG_VALUE = os.getenv("REDMINE_TAG_VALUE", "MEP").strip()
+REDMINE_CATEGORIES_JSON_DEFAULT = os.getenv("REDMINE_CATEGORIES_JSON", "").strip()
 ENV_FIELD = os.getenv("REDMINE_ENV_FIELD", "Environnement").strip()
 START_TIME_FIELD = os.getenv("REDMINE_START_TIME_FIELD", "Heure de début").strip()
 END_TIME_FIELD = os.getenv("REDMINE_END_TIME_FIELD", "Heure de fin").strip()
@@ -50,6 +51,9 @@ ROLLOUT_LOGGER_ENABLED_DEFAULT = os.getenv("ROLLOUT_LOGGER_ENABLED", "false").lo
 ROLLOUT_LOGGER_URL_DEFAULT = os.getenv("ROLLOUT_LOGGER_URL", "").strip().rstrip("/")
 ROLLOUT_LOGGER_VERIFY_TLS_DEFAULT = os.getenv("ROLLOUT_LOGGER_VERIFY_TLS", "true").lower() == "true"
 ROLLOUT_LOGGER_TIMEOUT_DEFAULT = max(3, int(os.getenv("ROLLOUT_LOGGER_TIMEOUT_SECONDS", "15")))
+ROLLOUT_LOGGER_POLL_INTERVAL_DEFAULT = max(30, int(os.getenv("ROLLOUT_LOGGER_POLL_INTERVAL_SECONDS", "60")))
+ROLLOUT_LOGGER_NOTIFY_EMAIL_DEFAULT = os.getenv("ROLLOUT_LOGGER_NOTIFY_EMAIL", "true").lower() == "true"
+ROLLOUT_LOGGER_NOTIFY_MATRIX_DEFAULT = os.getenv("ROLLOUT_LOGGER_NOTIFY_MATRIX", "true").lower() == "true"
 ALLOW_DEMO = os.getenv("ALLOW_DEMO", "false").lower() == "true"
 POLL_INTERVAL = max(60, int(os.getenv("POLL_INTERVAL_SECONDS", "300")))
 MAX_REDMINE_PAGES = max(1, int(os.getenv("MAX_REDMINE_PAGES", "50")))
@@ -214,6 +218,7 @@ class InfrastructureSettings(BaseModel):
     redmine_api_key: str = ""
     redmine_tag_field: str = "Tag"
     redmine_tag_value: str = "MEP"
+    redmine_categories_json: str = ""
     redmine_env_field: str = "Environnement"
     redmine_start_time_field: str = "Heure de début"
     redmine_end_time_field: str = "Heure de fin"
@@ -225,6 +230,9 @@ class InfrastructureSettings(BaseModel):
     rollout_logger_url: str = ""
     rollout_logger_verify_tls: bool = True
     rollout_logger_timeout_seconds: int = 15
+    rollout_logger_poll_interval_seconds: int = 60
+    rollout_logger_notify_email: bool = True
+    rollout_logger_notify_matrix: bool = True
     smtp_enabled: bool = False
     smtp_host: str = ""
     smtp_port: int = 25
@@ -362,6 +370,7 @@ def runtime_config() -> dict[str, Any]:
         "redmine_api_key": get_setting("redmine_api_key", REDMINE_API_KEY),
         "redmine_tag_field": get_setting("redmine_tag_field", TAG_FIELD),
         "redmine_tag_value": get_setting("redmine_tag_value", TAG_VALUE),
+        "redmine_categories_json": get_setting("redmine_categories_json", REDMINE_CATEGORIES_JSON_DEFAULT),
         "redmine_env_field": get_setting("redmine_env_field", ENV_FIELD),
         "redmine_start_time_field": get_setting("redmine_start_time_field", START_TIME_FIELD),
         "redmine_end_time_field": get_setting("redmine_end_time_field", END_TIME_FIELD),
@@ -373,6 +382,9 @@ def runtime_config() -> dict[str, Any]:
         "rollout_logger_url": get_setting("rollout_logger_url", ROLLOUT_LOGGER_URL_DEFAULT).rstrip("/"),
         "rollout_logger_verify_tls": bool_setting("rollout_logger_verify_tls", ROLLOUT_LOGGER_VERIFY_TLS_DEFAULT),
         "rollout_logger_timeout_seconds": int_setting("rollout_logger_timeout_seconds", ROLLOUT_LOGGER_TIMEOUT_DEFAULT),
+        "rollout_logger_poll_interval_seconds": max(30, int_setting("rollout_logger_poll_interval_seconds", ROLLOUT_LOGGER_POLL_INTERVAL_DEFAULT)),
+        "rollout_logger_notify_email": bool_setting("rollout_logger_notify_email", ROLLOUT_LOGGER_NOTIFY_EMAIL_DEFAULT),
+        "rollout_logger_notify_matrix": bool_setting("rollout_logger_notify_matrix", ROLLOUT_LOGGER_NOTIFY_MATRIX_DEFAULT),
         "smtp_enabled": bool_setting("smtp_enabled", SMTP_ENABLED),
         "smtp_host": get_setting("smtp_host", SMTP_HOST),
         "smtp_port": int(get_setting("smtp_port", str(SMTP_PORT))),
@@ -554,6 +566,23 @@ def init_db() -> None:
           ON notifications(issue_id, issue_version, notification_type, recipient_key)
           WHERE manual = 0 AND status = 'sent';
         CREATE INDEX IF NOT EXISTS idx_notification_issue ON notifications(issue_id, sent_at DESC);
+        CREATE TABLE IF NOT EXISTS rollout_events (
+          fingerprint TEXT PRIMARY KEY,
+          project TEXT NOT NULL DEFAULT '',
+          environment TEXT NOT NULL DEFAULT '',
+          version TEXT NOT NULL DEFAULT '',
+          requester TEXT NOT NULL DEFAULT '',
+          rollout_date TEXT NOT NULL DEFAULT '',
+          first_seen_at TEXT NOT NULL,
+          email_status TEXT NOT NULL DEFAULT 'pending',
+          email_sent_at TEXT,
+          email_error TEXT NOT NULL DEFAULT '',
+          matrix_status TEXT NOT NULL DEFAULT 'pending',
+          matrix_sent_at TEXT,
+          matrix_event_id TEXT NOT NULL DEFAULT '',
+          matrix_error TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_rollout_events_seen ON rollout_events(first_seen_at DESC);
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           username TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -627,6 +656,53 @@ def normalize_time(value: str) -> str | None:
         return f"{hour:02d}:{minute:02d}"
     except (ValueError, TypeError):return None
 
+def redmine_categories(cfg: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    cfg = cfg or runtime_config()
+    defaults = [
+        {"key":"mep","tag":str(cfg.get("redmine_tag_value") or "MEP"),"label_fr":"MEP","label_en":"Releases","planned_fr":"MEP planifiées","planned_en":"Scheduled releases","history_fr":"Historique MEP","history_en":"Release history","enabled":True,"dashboard":True,"calendar":True,"history":True,"notify":True,"reports":True,"menu":True,"order":10,"color":"#5b7cfa"},
+        {"key":"dc","tag":"DC","label_fr":"Actions DC","label_en":"Data center actions","planned_fr":"Actions en DC planifiées","planned_en":"Scheduled data center actions","history_fr":"Historique DC","history_en":"Data center history","enabled":True,"dashboard":True,"calendar":True,"history":True,"notify":True,"reports":True,"menu":True,"order":20,"color":"#22b8a7"},
+    ]
+    raw = str(cfg.get("redmine_categories_json") or "").strip()
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                defaults = parsed
+        except Exception as exc:
+            log_event("redmine","warning","Invalid Redmine categories JSON",str(exc))
+    result=[]
+    seen=set()
+    for idx,item in enumerate(defaults):
+        if not isinstance(item,dict): continue
+        tag=str(item.get("tag") or "").strip()
+        if not tag: continue
+        key=re.sub(r"[^a-z0-9_-]+","-",str(item.get("key") or tag).strip().lower()).strip("-") or f"category-{idx+1}"
+        if key in seen: key=f"{key}-{idx+1}"
+        seen.add(key)
+        result.append({
+            "key":key,"tag":tag,
+            "label_fr":str(item.get("label_fr") or tag),"label_en":str(item.get("label_en") or tag),
+            "planned_fr":str(item.get("planned_fr") or f"{tag} planifiées"),"planned_en":str(item.get("planned_en") or f"Scheduled {tag}"),
+            "history_fr":str(item.get("history_fr") or f"Historique {tag}"),"history_en":str(item.get("history_en") or f"{tag} history"),
+            "enabled":bool(item.get("enabled",True)),"dashboard":bool(item.get("dashboard",True)),
+            "calendar":bool(item.get("calendar",True)),"history":bool(item.get("history",True)),
+            "notify":bool(item.get("notify",True)),"reports":bool(item.get("reports",True)),"menu":bool(item.get("menu",True)),
+            "order":int(item.get("order",(idx+1)*10) or (idx+1)*10),
+            "color":str(item.get("color") or "#5b7cfa")
+        })
+    result.sort(key=lambda item:(item.get("order",9999),item.get("label_fr","").casefold()))
+    return result or defaults[:1]
+
+def match_redmine_category(tags: list[str], cfg: dict[str, Any]) -> dict[str, Any] | None:
+    lowered=[str(t).strip().casefold() for t in tags]
+    for category in redmine_categories(cfg):
+        if not category.get("enabled",True):
+            continue
+        expected=category["tag"].strip().casefold()
+        if any(t==expected or t.startswith(expected+" ") for t in lowered):
+            return category
+    return None
+
 def normalize_issue(raw: dict[str,Any], cfg: dict[str,Any]) -> dict[str,Any]:
     f=custom_field_map(raw)
     tags=[x.strip() for x in f.get(cfg['redmine_tag_field'],'').replace(';',',').split(',') if x.strip()]
@@ -638,15 +714,15 @@ def normalize_issue(raw: dict[str,Any], cfg: dict[str,Any]) -> dict[str,Any]:
     end_time=normalize_time(f.get(cfg['redmine_end_time_field'],''))
     if start_time and not end_time and estimated:
         end_time=(datetime.strptime(start_time,'%H:%M')+timedelta(hours=estimated)).strftime('%H:%M')
-    return {'id':raw.get('id'),'subject':raw.get('subject',''),'status':raw.get('status',{}).get('name','—'),'priority':raw.get('priority',{}).get('name','—'),'author':raw.get('author',{}).get('name','—'),'assigned_to':raw.get('assigned_to',{}).get('name','Non assigné'),'start_date':start,'due_date':due,'start_time':start_time,'end_time':end_time,'has_time':bool(start_time),'estimated_hours':estimated,'environment':f.get(cfg['redmine_env_field'],'Non défini') or 'Non défini','description':raw.get('description') or 'Aucune description.','tags':tags,'url':f"{cfg['redmine_url'].rstrip('/')}/issues/{raw.get('id')}",'updated_on':raw.get('updated_on','')}
+    category=match_redmine_category(tags,cfg)
+    return {'id':raw.get('id'),'subject':raw.get('subject',''),'status':raw.get('status',{}).get('name','—'),'priority':raw.get('priority',{}).get('name','—'),'author':raw.get('author',{}).get('name','—'),'assigned_to':raw.get('assigned_to',{}).get('name','Non assigné'),'start_date':start,'due_date':due,'start_time':start_time,'end_time':end_time,'has_time':bool(start_time),'estimated_hours':estimated,'environment':f.get(cfg['redmine_env_field'],'Non défini') or 'Non défini','description':raw.get('description') or 'Aucune description.','tags':tags,'url':f"{cfg['redmine_url'].rstrip('/')}/issues/{raw.get('id')}",'updated_on':raw.get('updated_on',''),'category_key':category.get('key') if category else '', 'category':category or {}}
 
 def demo_issues() -> list[dict[str,Any]]:
     today=now_local().date().isoformat()
     return [{'id':1258,'subject':'Déploiement correctif - Authentification','status':'To Do','priority':'Immédiat','author':'Julien Martin','assigned_to':'Sophie Dubois','start_date':today,'due_date':today,'start_time':'09:00','end_time':'10:30','has_time':True,'estimated_hours':1.5,'environment':'Production','description':'Correctif d’authentification avec validation et procédure de rollback.','tags':['MEP'],'url':'#','updated_on':now_local().isoformat()}]
 
 def is_mep(i: dict[str,Any], cfg: dict[str,Any]) -> bool:
-    expected=str(cfg.get('redmine_tag_value','MEP')).strip().casefold()
-    return any(t.casefold()==expected or 'mep urgente' in t.casefold() for t in i.get('tags',[]))
+    return bool(i.get('category_key') or match_redmine_category(i.get('tags',[]),cfg))
 def is_done(i): return str(i.get('status','')).strip().casefold() in DONE_STATUSES
 
 def priority_level(issue: dict[str,Any]) -> int:
@@ -657,7 +733,7 @@ def priority_level(issue: dict[str,Any]) -> int:
     return 1
 
 def issue_signature(issue: dict[str,Any]) -> dict[str,Any]:
-    return {k:issue.get(k) for k in ('subject','status','priority','assigned_to','start_date','due_date','start_time','end_time','environment','estimated_hours','updated_on')}
+    return {k:issue.get(k) for k in ('subject','status','priority','assigned_to','start_date','due_date','start_time','end_time','environment','estimated_hours','updated_on','category_key')}
 
 def issue_version(issue: dict[str,Any]) -> str:
     payload=json.dumps(issue_signature(issue),sort_keys=True,ensure_ascii=False).encode(); return hashlib.sha256(payload).hexdigest()[:24]
@@ -686,7 +762,7 @@ async def fetch_redmine():
             if offset>=int(p.get('total_count',offset)):break
     normalized=[normalize_issue(raw,cfg) for raw in all_issues]
     selected=[i for i in normalized if is_mep(i,cfg)]
-    print(f'Synchronisation terminée : {len(all_issues)} tickets lus, {len(selected)} MEP retenues.',flush=True)
+    print(f'Synchronisation terminée : {len(all_issues)} tickets lus, {len(selected)} tickets suivis retenus.',flush=True)
     return 'redmine',selected,pages,len(all_issues)
 
 def communication_language() -> str:
@@ -855,17 +931,20 @@ def priority_matrix_style(issue: dict[str, Any]) -> tuple[str, str, str]:
 def matrix_message(issue: dict[str, Any], kind: str, lang: str | None = None) -> tuple[str, str]:
     lang = lang or communication_language()
     color, icon, _ = priority_matrix_style(issue)
+    category = issue.get("category") or {}
+    category_label = category.get("label_fr") if lang == "fr" else category.get("label_en")
+    category_label = category_label or tr("Action Redmine", "Redmine action", lang)
     labels = {
-        "new": tr("Nouvelle MEP planifiée", "New scheduled release", lang),
-        "changed": tr("MEP modifiée", "Release updated", lang),
-        "daily": tr("MEP du jour", "Today's release", lang),
+        "new": tr("Nouvelle action planifiée", "New scheduled action", lang),
+        "changed": tr("Action modifiée", "Action updated", lang),
+        "daily": tr("Action du jour", "Today's action", lang),
         "test": tr("Test Matrix réussi", "Matrix test successful", lang),
     }
-    heading = labels.get(kind, labels["new"])
+    heading = f"{labels.get(kind, labels['new'])} — {category_label}"
     schedule = issue_schedule(issue, lang)
     redmine = issue.get("url", "")
     planner = issue_app_url(issue)
-    plain = f"{icon} {heading} — MEP #{issue['id']} {issue['subject']} | {schedule} | {issue.get('environment') or '-'} | {redmine}"
+    plain = f"{icon} {heading} — #{issue['id']} {issue['subject']} | {schedule} | {issue.get('environment') or '-'} | {redmine}"
     rows = [
         (tr("Planification", "Schedule", lang), schedule),
         (tr("Environnement", "Environment", lang), issue.get("environment") or "—"),
@@ -927,7 +1006,7 @@ async def maybe_matrix(issue: dict[str, Any], kind: str) -> None:
 def smtp_send(subject:str,html_body:str,recipients:list[str],attachment:bytes|None=None,filename:str|None=None,lang:str|None=None,calendar_data:bytes|None=None,calendar_filename:str|None=None,calendar_method:str="REQUEST")->str:
     cfg=runtime_config()
     if not cfg["smtp_enabled"]:raise RuntimeError('SMTP désactivé dans .env')
-    if not SMTP_HOST:raise RuntimeError('SMTP_HOST non configuré')
+    if not cfg['smtp_host']:raise RuntimeError('SMTP host is not configured')
     if not recipients:raise RuntimeError('Aucun destinataire')
     msg=EmailMessage(); msg['Subject']=subject; msg['From']=cfg['smtp_from']; msg['To']=', '.join(recipients); msg['Message-ID']=f"<{hashlib.sha256((subject+str(now_local().timestamp())).encode()).hexdigest()[:24]}@mep-planner>"
     lang=lang or communication_language()
@@ -983,16 +1062,25 @@ def notification_summary(issue_id:int)->dict[str,Any]:
     return {'sent':bool(successful),'last':dict(last),'count':len(successful),'recipients':last['recipients'].split(';') if last['recipients'] else [],'errors':sum(r['status']=='error' for r in rows)}
 
 async def send_change_notifications(previous,current,issues):
-    if not previous or not SMTP_ENABLED or not SMTP_RECIPIENTS:return
+    cfg=runtime_config(); recipients=[v.strip() for v in str(cfg.get('smtp_recipients') or '').split(';') if v.strip()]
+    if not previous:return
     by_id={str(i['id']):i for i in issues}
     for key in [k for k in current if k not in previous]:
-        try: await asyncio.to_thread(deliver,by_id[key],'new',f"{tr('Nouvelle MEP planifiée','New scheduled release')} - #{key}",tr('Une nouvelle mise en production a été détectée.','A new production release has been detected.'),SMTP_RECIPIENTS,False,True,'')
-        except Exception as e:print(f'Erreur SMTP nouvelle MEP #{key}: {e}',flush=True)
-        await maybe_matrix(by_id[key], 'new')
+        issue=by_id[key]; category=issue.get('category') or {}
+        if not category.get('notify',True): continue
+        label=category.get('label_fr') if communication_language()=='fr' else category.get('label_en')
+        if cfg.get('smtp_enabled') and recipients:
+            try: await asyncio.to_thread(deliver,issue,'new',f"{tr('Nouvelle action planifiée','New scheduled action')} — {label} - #{key}",tr('Une nouvelle action planifiée a été détectée.','A new scheduled action has been detected.'),recipients,False,True,'')
+            except Exception as e: log_event('smtp','error','New Redmine action notification failed',f'#{key}: {e}')
+        await maybe_matrix(issue, 'new')
     for key in [k for k in current if k in previous and current[k]!=previous[k]]:
-        try: await asyncio.to_thread(deliver,by_id[key],'changed',f"{tr('MEP modifiée','Release updated')} - #{key}",tr('Les informations de cette MEP ont été modifiées.','The information for this release has been updated.'),SMTP_RECIPIENTS,False,True,'')
-        except Exception as e:print(f'Erreur SMTP modification MEP #{key}: {e}',flush=True)
-        await maybe_matrix(by_id[key], 'changed')
+        issue=by_id[key]; category=issue.get('category') or {}
+        if not category.get('notify',True): continue
+        label=category.get('label_fr') if communication_language()=='fr' else category.get('label_en')
+        if cfg.get('smtp_enabled') and recipients:
+            try: await asyncio.to_thread(deliver,issue,'changed',f"{tr('Action modifiée','Action updated')} — {label} - #{key}",tr('Les informations de cette action ont été modifiées.','The information for this action has been updated.'),recipients,False,True,'')
+            except Exception as e: log_event('smtp','error','Changed Redmine action notification failed',f'#{key}: {e}')
+        await maybe_matrix(issue, 'changed')
 
 async def synchronize(initial=False):
     global cache
@@ -1018,18 +1106,19 @@ async def daily_mailer():
         now=now_local();target=now.replace(hour=DAILY_EMAIL_HOUR,minute=DAILY_EMAIL_MINUTE,second=0,microsecond=0)
         if target<=now:target+=timedelta(days=1)
         await asyncio.sleep(max(1,(target-now).total_seconds()))
-        if not DAILY_EMAIL_ENABLED or not SMTP_ENABLED or not SMTP_RECIPIENTS:continue
+        cfg=runtime_config(); recipients=[v.strip() for v in str(cfg.get('smtp_recipients') or '').split(';') if v.strip()]
+        if not DAILY_EMAIL_ENABLED or not cfg.get('smtp_enabled') or not recipients:continue
         today=now_local().date().isoformat()
-        for issue in [i for i in cache.get('issues',[]) if i.get('start_date')==today and not is_done(i)]:
-            try:await asyncio.to_thread(deliver,issue,'daily',f"{tr('MEP du jour',"Today's release")} - #{issue['id']}",tr('Rappel de la mise en production prévue aujourd’hui.',"Reminder for today's scheduled production release."),SMTP_RECIPIENTS,False,True,'')
+        for issue in [i for i in cache.get('issues',[]) if i.get('start_date')==today and not is_done(i) and (i.get('category') or {}).get('notify',True)]:
+            try:await asyncio.to_thread(deliver,issue,'daily',f"{tr('Action du jour',"Today's action")} - #{issue['id']}",tr('Rappel de l’action planifiée aujourd’hui.',"Reminder for today's scheduled action."),recipients,False,True,'')
             except Exception as e:print(f"Erreur e-mail quotidien #{issue['id']}: {e}",flush=True)
             await maybe_matrix(issue, 'daily')
 
 @app.on_event('startup')
-async def startup():init_db();asyncio.create_task(watcher());asyncio.create_task(daily_mailer())
+async def startup():init_db();asyncio.create_task(watcher());asyncio.create_task(daily_mailer());asyncio.create_task(rollout_watcher())
 
 @app.get('/api/health')
-async def health():return {'status':'ok','version':APP_VERSION,'mode':cache['mode'],'syncing':sync_lock.locked(),'last_sync':cache['last_sync'],'last_attempt':cache['last_attempt'],'pages_read':cache['pages_read'],'tickets_read':cache['tickets_read'],'mep_count':len(cache.get('issues',[])),'error':cache['error']}
+async def health():return {'status':'ok','version':APP_VERSION,'mode':cache['mode'],'syncing':sync_lock.locked(),'last_sync':cache['last_sync'],'last_attempt':cache['last_attempt'],'pages_read':cache['pages_read'],'tickets_read':cache['tickets_read'],'tracked_count':len(cache.get('issues',[])),'mep_count':len(cache.get('issues',[])),'error':cache['error']}
 
 
 def normalize_rollout(raw: dict[str, Any], index: int = 0) -> dict[str, Any]:
@@ -1070,7 +1159,119 @@ async def fetch_rollouts(params: dict[str, Any] | None = None) -> list[dict[str,
         raise
     except Exception as exc:
         log_event("rollout_logger", "error", "Rollout Logger query failed", f"{type(exc).__name__}: {exc}")
-        raise HTTPException(502, f"Rollout Logger unavailable: {exc}")
+        raise
+
+def rollout_fingerprint(rollout: dict[str, Any]) -> str:
+    identity = "\x1f".join(str(rollout.get(key) or "").strip() for key in ("project", "environment", "version", "requester", "date"))
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+def rollout_subject(rollout: dict[str, Any], lang: str | None = None) -> str:
+    lang = lang or communication_language()
+    return f"{tr('Nouveau déploiement Rollout Logger','New Rollout Logger deployment',lang)} — {rollout.get('project') or '—'} {rollout.get('version') or ''}".strip()
+
+def rollout_email_html(rollout: dict[str, Any], lang: str | None = None) -> str:
+    lang = lang or communication_language()
+    labels = {
+        "project": tr("Projet", "Project", lang), "environment": tr("Environnement", "Environment", lang),
+        "version": tr("Version", "Version", lang), "requester": tr("Demandeur", "Requester", lang),
+        "date": tr("Date du déploiement", "Deployment date", lang),
+    }
+    rows = "".join(f'<tr><td style="padding:7px 18px 7px 0;color:#64748b">{html.escape(labels[key])}</td><td style="padding:7px 0"><strong>{html.escape(str(rollout.get(key) or "—"))}</strong></td></tr>' for key in ("project","environment","version","requester","date"))
+    base = app_public_url()
+    history_link = f'<p style="margin-top:18px"><a href="{html.escape(base, quote=True)}" style="color:#5b7cfa">MEP Planner — {tr("Historique des MEP","Release history",lang)}</a></p>' if base else ""
+    return f"""<div style="font-family:Arial,sans-serif;max-width:680px;margin:auto;color:#0f172a">
+<div style="border-left:5px solid #2563eb;padding:14px 18px;background:#eff6ff;border-radius:8px">
+<h2 style="margin:0 0 8px">🚀 {html.escape(tr("Nouveau déploiement détecté","New deployment detected",lang))}</h2>
+<p style="margin:0">{html.escape(tr("Rollout Logger vient d'enregistrer une nouvelle mise en production.","Rollout Logger has recorded a new deployment.",lang))}</p>
+<table style="margin-top:14px;border-collapse:collapse">{rows}</table>{history_link}
+</div></div>"""
+
+def rollout_matrix_message(rollout: dict[str, Any], lang: str | None = None) -> tuple[str, str]:
+    lang = lang or communication_language()
+    heading = tr("Nouveau déploiement Rollout Logger", "New Rollout Logger deployment", lang)
+    project = rollout.get("project") or "—"; version = rollout.get("version") or "—"; environment = rollout.get("environment") or "—"
+    plain = f"🚀 {heading} — {project} {version} | {environment} | {rollout.get('requester') or '—'} | {rollout.get('date') or '—'}"
+    fields = [(tr("Projet","Project",lang),project),(tr("Environnement","Environment",lang),environment),(tr("Version","Version",lang),version),(tr("Demandeur","Requester",lang),rollout.get("requester") or "—"),(tr("Date","Date",lang),rollout.get("date") or "—")]
+    rows = "".join(f'<tr><td style="padding:4px 14px 4px 0;color:#94a3b8">{html.escape(str(k))}</td><td style="padding:4px 0"><b>{html.escape(str(v))}</b></td></tr>' for k,v in fields)
+    formatted = f'<div style="border-left:5px solid #2563eb;padding:12px 16px;background:#111827;border-radius:8px"><div style="font-size:18px"><b>🚀 {html.escape(heading)}</b></div><table style="margin-top:10px">{rows}</table></div>'
+    return plain, formatted
+
+async def send_rollout_matrix(rollout: dict[str, Any]) -> str:
+    cfg = matrix_config()
+    if not cfg["enabled"]: raise RuntimeError("Matrix is disabled")
+    if not cfg["homeserver"] or not cfg["access_token"] or not cfg["room_id"]: raise RuntimeError("Matrix configuration is incomplete")
+    body, formatted = rollout_matrix_message(rollout)
+    txn_id = f"rollout-{rollout_fingerprint(rollout)[:16]}-{int(time.time()*1000)}"
+    room = quote(cfg["room_id"], safe="")
+    url = f'{cfg["homeserver"]}/_matrix/client/v3/rooms/{room}/send/m.room.message/{txn_id}'
+    headers = {"Authorization": f'Bearer {cfg["access_token"]}', "Content-Type":"application/json"}
+    payload = {"msgtype":"m.notice", "body":body, "format":"org.matrix.custom.html", "formatted_body":formatted}
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        response = await client.put(url, headers=headers, json=payload); response.raise_for_status(); data=response.json()
+    return str(data.get("event_id") or "")
+
+def register_rollouts(records: list[dict[str, Any]], baseline: bool = False) -> int:
+    inserted = 0
+    now = now_local().isoformat(timespec="seconds")
+    with db() as con:
+        for rollout in records:
+            fp = rollout_fingerprint(rollout)
+            email_status = "baseline" if baseline else "pending"
+            matrix_status = "baseline" if baseline else "pending"
+            cur=con.execute("INSERT OR IGNORE INTO rollout_events(fingerprint,project,environment,version,requester,rollout_date,first_seen_at,email_status,matrix_status) VALUES(?,?,?,?,?,?,?,?,?)",
+                (fp,rollout.get("project", ""),rollout.get("environment", ""),rollout.get("version", ""),rollout.get("requester", ""),rollout.get("date", ""),now,email_status,matrix_status))
+            inserted += cur.rowcount
+    return inserted
+
+def pending_rollout_events(limit: int = 100) -> list[dict[str, Any]]:
+    with db() as con:
+        rows=con.execute("SELECT * FROM rollout_events WHERE email_status IN ('pending','error') OR matrix_status IN ('pending','error') ORDER BY first_seen_at ASC LIMIT ?",(limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+async def process_rollout_notifications() -> None:
+    cfg = runtime_config(); recipients=[v.strip() for v in str(cfg.get("smtp_recipients") or "").split(";") if v.strip()]
+    for event in pending_rollout_events():
+        rollout={"project":event["project"],"environment":event["environment"],"version":event["version"],"requester":event["requester"],"date":event["rollout_date"]}
+        if event["email_status"] in {"pending","error"}:
+            if not cfg.get("rollout_logger_notify_email"):
+                with db() as con: con.execute("UPDATE rollout_events SET email_status='disabled',email_error='' WHERE fingerprint=?",(event["fingerprint"],))
+            elif cfg.get("smtp_enabled") and recipients:
+                try:
+                    message_id=await asyncio.to_thread(smtp_send,rollout_subject(rollout),rollout_email_html(rollout),recipients)
+                    with db() as con: con.execute("UPDATE rollout_events SET email_status='sent',email_sent_at=?,email_error='' WHERE fingerprint=?",(now_local().isoformat(timespec='seconds'),event["fingerprint"]))
+                    log_event("rollout_logger","success","Rollout email notification sent",f"{rollout['project']} {rollout['version']} -> {';'.join(recipients)}")
+                except Exception as exc:
+                    with db() as con: con.execute("UPDATE rollout_events SET email_status='error',email_error=? WHERE fingerprint=?",(str(exc),event["fingerprint"]))
+                    log_event("rollout_logger","error","Rollout email notification failed",f"{type(exc).__name__}: {exc}")
+        if event["matrix_status"] in {"pending","error"}:
+            if not cfg.get("rollout_logger_notify_matrix"):
+                with db() as con: con.execute("UPDATE rollout_events SET matrix_status='disabled',matrix_error='' WHERE fingerprint=?",(event["fingerprint"],))
+            elif matrix_config().get("enabled"):
+                try:
+                    event_id=await send_rollout_matrix(rollout)
+                    with db() as con: con.execute("UPDATE rollout_events SET matrix_status='sent',matrix_sent_at=?,matrix_event_id=?,matrix_error='' WHERE fingerprint=?",(now_local().isoformat(timespec='seconds'),event_id,event["fingerprint"]))
+                    log_event("rollout_logger","success","Rollout Matrix notification sent",f"{rollout['project']} {rollout['version']} -> {matrix_config().get('room_id','')}")
+                except Exception as exc:
+                    with db() as con: con.execute("UPDATE rollout_events SET matrix_status='error',matrix_error=? WHERE fingerprint=?",(str(exc),event["fingerprint"]))
+                    log_event("rollout_logger","error","Rollout Matrix notification failed",f"{type(exc).__name__}: {exc}")
+
+async def rollout_watcher() -> None:
+    initialized = False
+    while True:
+        cfg=runtime_config()
+        if cfg.get("rollout_logger_enabled") and cfg.get("rollout_logger_url"):
+            try:
+                records=await fetch_rollouts({"limit":100,"offset":0})
+                with db() as con: total=con.execute("SELECT COUNT(*) AS c FROM rollout_events").fetchone()["c"]
+                baseline = (total == 0 and not initialized)
+                inserted=register_rollouts(records,baseline=baseline)
+                if baseline: log_event("rollout_logger","info","Notification baseline initialized",f"{inserted} existing rollouts registered without notification")
+                elif inserted: log_event("rollout_logger","info","New rollouts detected",str(inserted))
+                initialized=True
+                await process_rollout_notifications()
+            except Exception as exc:
+                log_event("rollout_logger","error","Rollout notification watcher failed",f"{type(exc).__name__}: {exc}")
+        await asyncio.sleep(max(30,int(cfg.get("rollout_logger_poll_interval_seconds") or 60)))
 
 @app.get('/api/rollouts')
 async def rollout_history(
@@ -1091,7 +1292,7 @@ async def issues(authorization: str | None = Header(default=None)):
     current_user(authorization)
     data=[]
     for issue in cache.get('issues',[]):data.append({**issue,'priority_level':priority_level(issue),'notification':notification_summary(issue['id'])})
-    return {'mode':cache['mode'],'syncing':sync_lock.locked(),'last_sync':cache['last_sync'],'issues':[i for i in data if not is_done(i)],'history':[i for i in data if is_done(i)],'error':cache['error']}
+    return {'mode':cache['mode'],'syncing':sync_lock.locked(),'last_sync':cache['last_sync'],'issues':[i for i in data if not is_done(i)],'history':[i for i in data if is_done(i)],'categories':[c for c in redmine_categories(runtime_config()) if c.get('enabled',True)],'error':cache['error']}
 
 @app.post('/api/refresh')
 async def refresh(authorization: str | None = Header(default=None)):
@@ -1440,7 +1641,7 @@ async def test_redmine_configuration(authorization: str | None = Header(default=
         if cache.get('error'):
             raise RuntimeError(cache['error'])
         log_event('redmine','success','Connection test successful', f"user={user.get('login') or user.get('firstname','')}; server={cfg['redmine_url']}")
-        return {'ok':True,'status':'connected','user':user.get('login') or user.get('firstname',''),'display_name':' '.join(v for v in [user.get('firstname',''),user.get('lastname','')] if v).strip(),'server':cfg['redmine_url'],'message':'Redmine connection successful','sync':{'mep_count':len(cache.get('issues',[])),'tickets_read':cache.get('tickets_read',0),'last_sync':cache.get('last_sync')}}
+        return {'ok':True,'status':'connected','user':user.get('login') or user.get('firstname',''),'display_name':' '.join(v for v in [user.get('firstname',''),user.get('lastname','')] if v).strip(),'server':cfg['redmine_url'],'message':'Redmine connection successful','sync':{'tracked_count':len(cache.get('issues',[])),'mep_count':len(cache.get('issues',[])),'tickets_read':cache.get('tickets_read',0),'last_sync':cache.get('last_sync')}}
     except Exception as exc:
         log_event('redmine','error','Connection test failed', f'{type(exc).__name__}: {exc}')
         raise HTTPException(502,str(exc))
@@ -1770,7 +1971,7 @@ async def update_profile(payload:ProfileUpdateRequest, authorization: str | None
 @app.get('/api/reports/summary')
 async def reports_summary(days:int=Query(30,ge=1,le=365),authorization: str | None = Header(default=None)):
     require_admin_or_user_admin(authorization)
-    issues=cache.get('issues',[])
+    issues=[i for i in cache.get('issues',[]) if (i.get('category') or {}).get('reports',True)]
     today=now_local().date()
     past_start=today-timedelta(days=days-1)
     future_end=today+timedelta(days=days-1)
@@ -1784,6 +1985,7 @@ async def reports_summary(days:int=Query(30,ge=1,le=365),authorization: str | No
     by_env={}
     by_priority={}
     by_status={}
+    by_category={}
     scheduled_count=0
 
     for i in issues:
@@ -1815,6 +2017,10 @@ async def reports_summary(days:int=Query(30,ge=1,le=365),authorization: str | No
             by_env[env]=by_env.get(env,0)+1
             by_priority[priority]=by_priority.get(priority,0)+1
             by_status[status]=by_status.get(status,0)+1
+            category=(i.get('category') or {})
+            category_label=category.get('label_en') if communication_language()=='en' else category.get('label_fr')
+            category_label=category_label or i.get('category_key') or 'Redmine'
+            by_category[category_label]=by_category.get(category_label,0)+1
 
             if i.get('start_time'):
                 scheduled_count+=1
@@ -1824,6 +2030,9 @@ async def reports_summary(days:int=Query(30,ge=1,le=365),authorization: str | No
     cutoff=past_start.isoformat()
 
     with db() as con:
+        rollout_rows=con.execute("SELECT rollout_date FROM rollout_events WHERE rollout_date>=?",(cutoff,)).fetchall()
+        rollout_count=len(rollout_rows)
+        by_category['Rollout Logger']=rollout_count
         smtp_ok=con.execute("SELECT COUNT(*) AS c FROM notifications WHERE sent_at>=? AND status='sent'",(cutoff,)).fetchone()['c']
         smtp_ko=con.execute("SELECT COUNT(*) AS c FROM notifications WHERE sent_at>=? AND status='error'",(cutoff,)).fetchone()['c']
 
@@ -1838,6 +2047,8 @@ async def reports_summary(days:int=Query(30,ge=1,le=365),authorization: str | No
         'by_environment':by_env,
         'by_priority':by_priority,
         'by_status':by_status,
+        'by_category':by_category,
+        'rollout_count':rollout_count,
         'timeline_completed':[{'date':date,'count':count} for date,count in completed_daily.items()],
         'timeline_scheduled':[{'date':date,'count':count} for date,count in scheduled_daily.items()],
         'timeline':[{'date':date,'count':count} for date,count in completed_daily.items()],

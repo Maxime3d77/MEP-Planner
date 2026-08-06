@@ -51,6 +51,19 @@ ROLLOUT_LOGGER_ENABLED=false
 ROLLOUT_LOGGER_URL=http://rollout-logger.edd
 ROLLOUT_LOGGER_VERIFY_TLS=true
 ROLLOUT_LOGGER_TIMEOUT_SECONDS=15
+ROLLOUT_LOGGER_POLL_INTERVAL_SECONDS=60
+ROLLOUT_LOGGER_NOTIFY_EMAIL=true
+ROLLOUT_LOGGER_NOTIFY_MATRIX=true
+EOF
+fi
+if [[ -f .env ]]; then
+  grep -q '^ROLLOUT_LOGGER_POLL_INTERVAL_SECONDS=' .env || echo 'ROLLOUT_LOGGER_POLL_INTERVAL_SECONDS=60' >> .env
+  grep -q '^ROLLOUT_LOGGER_NOTIFY_EMAIL=' .env || echo 'ROLLOUT_LOGGER_NOTIFY_EMAIL=true' >> .env
+  grep -q '^ROLLOUT_LOGGER_NOTIFY_MATRIX=' .env || echo 'ROLLOUT_LOGGER_NOTIFY_MATRIX=true' >> .env
+  grep -q '^REDMINE_CATEGORIES_JSON=' .env || cat >> .env <<'EOF'
+
+# Dynamic Redmine categories (optional; UI settings take priority)
+REDMINE_CATEGORIES_JSON=[{"key":"mep","tag":"MEP","label_fr":"MEP","label_en":"Releases","planned_fr":"MEP planifiées","planned_en":"Scheduled releases","history_fr":"Historique MEP","history_en":"Release history","calendar":true,"notify":true,"reports":true,"menu":true,"color":"#5b7cfa"},{"key":"dc","tag":"DC","label_fr":"Actions DC","label_en":"Data center actions","planned_fr":"Actions en DC planifiées","planned_en":"Scheduled data center actions","history_fr":"Historique DC","history_en":"Data center history","calendar":true,"notify":true,"reports":true,"menu":true,"color":"#22b8a7"}]
 EOF
 fi
 
