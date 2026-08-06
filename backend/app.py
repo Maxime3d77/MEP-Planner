@@ -34,7 +34,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-APP_VERSION = "5.3.1"
+APP_VERSION = "5.3.2"
 app = FastAPI(title="MEP Planner API", version=APP_VERSION)
 oidc_states: dict[str, dict[str, Any]] = {}
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -54,6 +54,11 @@ ROLLOUT_LOGGER_TIMEOUT_DEFAULT = max(3, int(os.getenv("ROLLOUT_LOGGER_TIMEOUT_SE
 ROLLOUT_LOGGER_POLL_INTERVAL_DEFAULT = max(30, int(os.getenv("ROLLOUT_LOGGER_POLL_INTERVAL_SECONDS", "60")))
 ROLLOUT_LOGGER_NOTIFY_EMAIL_DEFAULT = os.getenv("ROLLOUT_LOGGER_NOTIFY_EMAIL", "true").lower() == "true"
 ROLLOUT_LOGGER_NOTIFY_MATRIX_DEFAULT = os.getenv("ROLLOUT_LOGGER_NOTIFY_MATRIX", "true").lower() == "true"
+ROLLOUT_LOGGER_HISTORY_LABEL_FR_DEFAULT = os.getenv("ROLLOUT_LOGGER_HISTORY_LABEL_FR", "Historique BO/FO").strip() or "Historique BO/FO"
+ROLLOUT_LOGGER_HISTORY_LABEL_EN_DEFAULT = os.getenv("ROLLOUT_LOGGER_HISTORY_LABEL_EN", "BO/FO history").strip() or "BO/FO history"
+ROLLOUT_LOGGER_SHOW_MENU_DEFAULT = os.getenv("ROLLOUT_LOGGER_SHOW_MENU", "true").lower() == "true"
+ROLLOUT_LOGGER_SHOW_CALENDAR_DEFAULT = os.getenv("ROLLOUT_LOGGER_SHOW_CALENDAR", "true").lower() == "true"
+ROLLOUT_LOGGER_INCLUDE_REPORTS_DEFAULT = os.getenv("ROLLOUT_LOGGER_INCLUDE_REPORTS", "true").lower() == "true"
 ALLOW_DEMO = os.getenv("ALLOW_DEMO", "false").lower() == "true"
 POLL_INTERVAL = max(60, int(os.getenv("POLL_INTERVAL_SECONDS", "300")))
 MAX_REDMINE_PAGES = max(1, int(os.getenv("MAX_REDMINE_PAGES", "50")))
@@ -233,6 +238,11 @@ class InfrastructureSettings(BaseModel):
     rollout_logger_poll_interval_seconds: int = 60
     rollout_logger_notify_email: bool = True
     rollout_logger_notify_matrix: bool = True
+    rollout_logger_history_label_fr: str = "Historique BO/FO"
+    rollout_logger_history_label_en: str = "BO/FO history"
+    rollout_logger_show_menu: bool = True
+    rollout_logger_show_calendar: bool = True
+    rollout_logger_include_reports: bool = True
     smtp_enabled: bool = False
     smtp_host: str = ""
     smtp_port: int = 25
@@ -385,6 +395,11 @@ def runtime_config() -> dict[str, Any]:
         "rollout_logger_poll_interval_seconds": max(30, int_setting("rollout_logger_poll_interval_seconds", ROLLOUT_LOGGER_POLL_INTERVAL_DEFAULT)),
         "rollout_logger_notify_email": bool_setting("rollout_logger_notify_email", ROLLOUT_LOGGER_NOTIFY_EMAIL_DEFAULT),
         "rollout_logger_notify_matrix": bool_setting("rollout_logger_notify_matrix", ROLLOUT_LOGGER_NOTIFY_MATRIX_DEFAULT),
+        "rollout_logger_history_label_fr": get_setting("rollout_logger_history_label_fr", ROLLOUT_LOGGER_HISTORY_LABEL_FR_DEFAULT),
+        "rollout_logger_history_label_en": get_setting("rollout_logger_history_label_en", ROLLOUT_LOGGER_HISTORY_LABEL_EN_DEFAULT),
+        "rollout_logger_show_menu": bool_setting("rollout_logger_show_menu", ROLLOUT_LOGGER_SHOW_MENU_DEFAULT),
+        "rollout_logger_show_calendar": bool_setting("rollout_logger_show_calendar", ROLLOUT_LOGGER_SHOW_CALENDAR_DEFAULT),
+        "rollout_logger_include_reports": bool_setting("rollout_logger_include_reports", ROLLOUT_LOGGER_INCLUDE_REPORTS_DEFAULT),
         "smtp_enabled": bool_setting("smtp_enabled", SMTP_ENABLED),
         "smtp_host": get_setting("smtp_host", SMTP_HOST),
         "smtp_port": int(get_setting("smtp_port", str(SMTP_PORT))),
@@ -1282,10 +1297,17 @@ async def rollout_history(
     offset: int = Query(0, ge=0),
 ):
     cfg = runtime_config()
+    metadata = {
+        "history_label_fr": cfg.get("rollout_logger_history_label_fr") or "Historique BO/FO",
+        "history_label_en": cfg.get("rollout_logger_history_label_en") or "BO/FO history",
+        "show_menu": bool(cfg.get("rollout_logger_show_menu")),
+        "show_calendar": bool(cfg.get("rollout_logger_show_calendar")),
+        "include_reports": bool(cfg.get("rollout_logger_include_reports")),
+    }
     if not cfg.get("rollout_logger_enabled"):
-        return {"enabled": False, "rollouts": [], "limit": limit, "offset": offset, "has_more": False}
+        return {"enabled": False, "rollouts": [], "limit": limit, "offset": offset, "has_more": False, **metadata}
     records = await fetch_rollouts({"project": project, "environment": environment, "requester": requester, "limit": limit, "offset": offset})
-    return {"enabled": True, "rollouts": records, "limit": limit, "offset": offset, "has_more": len(records) == limit}
+    return {"enabled": True, "rollouts": records, "limit": limit, "offset": offset, "has_more": len(records) == limit, **metadata}
 
 @app.get('/api/issues')
 async def issues(authorization: str | None = Header(default=None)):
@@ -2031,8 +2053,8 @@ async def reports_summary(days:int=Query(30,ge=1,le=365),authorization: str | No
 
     with db() as con:
         rollout_rows=con.execute("SELECT rollout_date FROM rollout_events WHERE rollout_date>=?",(cutoff,)).fetchall()
-        rollout_count=len(rollout_rows)
-        by_category['Rollout Logger']=rollout_count
+        rollout_count=len(rollout_rows) if cfg.get('rollout_logger_include_reports') else 0
+        if cfg.get('rollout_logger_include_reports'): by_category['Rollout Logger']=rollout_count
         smtp_ok=con.execute("SELECT COUNT(*) AS c FROM notifications WHERE sent_at>=? AND status='sent'",(cutoff,)).fetchone()['c']
         smtp_ko=con.execute("SELECT COUNT(*) AS c FROM notifications WHERE sent_at>=? AND status='error'",(cutoff,)).fetchone()['c']
 

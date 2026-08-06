@@ -1,5 +1,20 @@
 # Changelog
 
+## v5.3.2
+
+### Added
+- Dedicated, configurable Rollout Logger history menu.
+- French and English Rollout Logger menu labels.
+- Rollout Logger display options for the sidebar, calendar and reports.
+
+### Changed
+- Simultaneous calendar events are laid out side by side.
+- Redmine category histories now contain only their own completed Redmine tickets.
+
+### Fixed
+- Rollout Logger deployments appearing in every Redmine category history.
+- Overlapping calendar event text when several deployments occurred at the same time.
+
 ## v5.3.1
 
 ### Added

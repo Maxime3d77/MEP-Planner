@@ -20,7 +20,7 @@
 <button class="primary-action" data-en="Sign in" data-fr="Se connecter" id="mainLoginSubmit" type="submit">Se connecter</button>
 <div class="login-result" id="mainLoginResult" role="alert"></div><div class="oidc-login hidden" id="oidcLoginArea"><div class="login-separator"><span>ou</span></div><a class="secondary oidc-button" href="/api/auth/oidc/login" id="oidcLoginButton">Connexion SSO / OIDC</a></div>
 </form>
-<div class="login-footer"><span>MEP Planner</span><span>v5.3.1</span></div>
+<div class="login-footer"><span>MEP Planner</span><span>v5.3.2</span></div>
 </div>
 </section>
 <div class="layout hidden" id="appLayout">
@@ -187,6 +187,11 @@
 <label><span data-en="Notification polling interval (seconds)" data-fr="Intervalle de détection des nouveaux déploiements (secondes)">Intervalle de détection des nouveaux déploiements (secondes)</span><input id="rolloutLoggerPollInterval" min="30" max="3600" type="number" value="60"/></label>
 <label class="check"><input id="rolloutLoggerNotifyEmail" type="checkbox" checked/> <span data-en="Email every new rollout" data-fr="Notifier chaque nouveau déploiement par e-mail">Notifier chaque nouveau déploiement par e-mail</span></label>
 <label class="check"><input id="rolloutLoggerNotifyMatrix" type="checkbox" checked/> <span data-en="Send every new rollout to Matrix" data-fr="Notifier chaque nouveau déploiement dans Matrix">Notifier chaque nouveau déploiement dans Matrix</span></label>
+<label><span data-en="History menu name (French)" data-fr="Nom du menu historique (français)">Nom du menu historique (français)</span><input id="rolloutLoggerHistoryLabelFr" type="text" value="Historique BO/FO"/></label>
+<label><span data-en="History menu name (English)" data-fr="Nom du menu historique (anglais)">Nom du menu historique (anglais)</span><input id="rolloutLoggerHistoryLabelEn" type="text" value="BO/FO history"/></label>
+<label class="check"><input id="rolloutLoggerShowMenu" type="checkbox" checked/> <span data-en="Show the dedicated history menu" data-fr="Afficher le menu d’historique dédié">Afficher le menu d’historique dédié</span></label>
+<label class="check"><input id="rolloutLoggerShowCalendar" type="checkbox" checked/> <span data-en="Show deployments in the main calendar" data-fr="Afficher les déploiements dans le calendrier principal">Afficher les déploiements dans le calendrier principal</span></label>
+<label class="check"><input id="rolloutLoggerIncludeReports" type="checkbox" checked/> <span data-en="Include Rollout Logger in reports" data-fr="Inclure Rollout Logger dans les rapports">Inclure Rollout Logger dans les rapports</span></label>
 </div>
 <div class="inline-actions"><button class="secondary" id="testRolloutLogger" type="button"><span data-en="Test connection" data-fr="Tester la connexion">Tester la connexion</span></button><span id="rolloutLoggerTestResult"></span></div>
 </section>

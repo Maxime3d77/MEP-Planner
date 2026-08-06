@@ -25,3 +25,10 @@ Settings:
 - `ROLLOUT_LOGGER_POLL_INTERVAL_SECONDS` (minimum 30 seconds)
 - `ROLLOUT_LOGGER_NOTIFY_EMAIL`
 - `ROLLOUT_LOGGER_NOTIFY_MATRIX`
+
+
+## Dedicated history menu
+
+Rollout Logger deployments are displayed in their own history page. The menu name can be customized in French and English from **Settings → Rollout Logger**. The menu is automatically hidden when Rollout Logger or its menu option is disabled. Rollout Logger records are never mixed into Redmine category histories.
+
+Simultaneous calendar events are displayed side by side whenever space is available.
