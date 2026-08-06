@@ -361,6 +361,7 @@ function donutChart(obj){
  return `<div class="donut-layout"><div class="donut" style="background:conic-gradient(${stops})"><div><strong>${total}</strong><span>${tr('reportTotal')}</span></div></div><div class="donut-legend">${rows.map(([k,v],i)=>`<div><i style="--dot:${colors[i%colors.length]}"></i><span>${esc(k)}</span><b>${v}</b></div>`).join('')}</div></div>`;
 }
 async function loadReports(){
+ try{
  const days=Number($('reportDays')?.value||30),d=await api(`/api/reports/summary?days=${days}`);
  $('reportCards').innerHTML=[
   ['📦',tr('reportReleases'),d.releases],
@@ -375,6 +376,11 @@ async function loadReports(){
  $('reportPriority').innerHTML=svgBarChart(d.by_priority);
  $('reportEnv').innerHTML=svgBarChart(d.by_environment,true);
  $('reportCommunications').innerHTML=donutChart({[tr('reportSent')]:d.communications_sent,[tr('reportFailed')]:d.communications_errors});if($('reportCategory'))$('reportCategory').innerHTML=svgBarChart(d.by_category,true);
+ }catch(e){
+  const message=language==='en'?`Unable to load reports: ${e.message}`:`Impossible de charger les rapports : ${e.message}`;
+  if($('reportCards'))$('reportCards').innerHTML=`<article class="report-kpi report-error"><div><small>${esc(message)}</small></div></article>`;
+  ['reportTimeline','reportStatus','reportPriority','reportEnv','reportCommunications','reportCategory'].forEach(id=>{if($(id))$(id).innerHTML=`<div class="chart-empty">${esc(message)}</div>`});
+ }
 }
 
 async function testMatrix(){const result=$('matrixTestResult');if(!$('matrixEnabled').checked){result.textContent=tr('matrixDisabled');return}result.textContent=tr('matrixTesting');try{await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({company_name:$('companyName').value,company_subtitle:$('companySubtitle').value,company_accent:$('companyAccent').value,company_contact_email:$('companyContact').value,company_footer:$('companyFooter').value,language,communication_language:$('communicationLanguage').value,app_public_url:$('appPublicUrl').value,matrix_enabled:true,matrix_homeserver:$('matrixHomeserver').value,matrix_access_token:$('matrixToken').value,matrix_room_id:$('matrixRoomId').value,matrix_notify_new:$('matrixNotifyNew').checked,matrix_notify_changed:$('matrixNotifyChanged').checked,matrix_notify_daily:$('matrixNotifyDaily').checked})});await api('/api/settings/matrix/test',{method:'POST'});result.textContent='✓ '+tr('matrixSuccess');$('matrixToken').value=''}catch(e){result.textContent=tr('failure',{message:e.message})}}

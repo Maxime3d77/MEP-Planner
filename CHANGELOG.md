@@ -1,5 +1,14 @@
 # Changelog
 
+## v5.3.3
+
+### Fixed
+- Restored the Reports dashboard after a missing runtime configuration variable caused the summary API to fail.
+- Added a visible error state when report data cannot be loaded.
+- Individually imported LDAP users can now sign in without belonging to a mapped LDAP group.
+- LDAP users imported manually retain the role assigned in MEP Planner.
+- Existing LDAP accounts are migrated with direct-access compatibility; new JIT accounts remain restricted by LDAP group mappings.
+
 ## v5.3.2
 
 ### Added

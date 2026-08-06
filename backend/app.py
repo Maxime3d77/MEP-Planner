@@ -34,7 +34,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-APP_VERSION = "5.3.2"
+APP_VERSION = "5.3.3"
 app = FastAPI(title="MEP Planner API", version=APP_VERSION)
 oidc_states: dict[str, dict[str, Any]] = {}
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -611,6 +611,7 @@ def init_db() -> None:
           communication_language TEXT NOT NULL DEFAULT 'fr',
           email_enabled INTEGER NOT NULL DEFAULT 1,
           active INTEGER NOT NULL DEFAULT 1,
+          ldap_direct_access INTEGER NOT NULL DEFAULT 0,
           last_login TEXT,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
@@ -632,6 +633,12 @@ def init_db() -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_system_logs_type_date ON system_logs(system, occurred_at DESC);
         ''')
+        user_columns={row['name'] for row in con.execute('PRAGMA table_info(users)').fetchall()}
+        if 'ldap_direct_access' not in user_columns:
+            con.execute('ALTER TABLE users ADD COLUMN ldap_direct_access INTEGER NOT NULL DEFAULT 0')
+            # Preserve access for LDAP users created by older versions. New JIT accounts
+            # keep the default value 0 and remain subject to group mappings.
+            con.execute("UPDATE users SET ldap_direct_access=1 WHERE source='ldap'")
         count = con.execute('SELECT COUNT(*) AS c FROM users').fetchone()['c']
         if count == 0 and ADMIN_PASSWORD:
             now = now_local().isoformat(timespec='seconds')
@@ -1739,7 +1746,7 @@ def parse_ldap_group_map(raw: str) -> dict[str, str]:
             result[group.casefold()] = role
     return result
 
-def ldap_authenticate_and_profile(username: str, password: str, cfg: dict[str, Any]) -> dict[str, Any] | None:
+def ldap_authenticate_and_profile(username: str, password: str, cfg: dict[str, Any], require_mapped_group: bool = True) -> dict[str, Any] | None:
     from ldap3 import Connection, SUBTREE
     server = ldap_server(cfg)
     bind = Connection(server, user=cfg.get('ldap_bind_dn') or None, password=cfg.get('ldap_bind_password') or None, auto_bind=True)
@@ -1753,8 +1760,9 @@ def ldap_authenticate_and_profile(username: str, password: str, cfg: dict[str, A
     groups=ldap_group_names(bind,cfg,user_dn,username)
     mapping=parse_ldap_group_map(str(cfg.get('ldap_group_map') or ''))
     matched_roles={mapping[g.casefold()] for g in groups if g.casefold() in mapping}
-    # When a mapping is configured, membership in at least one mapped group is mandatory.
-    if mapping and not matched_roles:
+    # JIT users must match an allowed LDAP group. Individually imported users
+    # can authenticate without group membership when direct access is enabled.
+    if require_mapped_group and mapping and not matched_roles:
         bind.unbind(); return None
     bind.unbind()
     auth=Connection(server,user=user_dn,password=password,auto_bind=True); ok=bool(auth.bound); auth.unbind()
@@ -1828,7 +1836,7 @@ async def import_ldap(payload: LdapImportRequest, authorization: str | None = He
         for item in payload.entries:
             username=str(item.get('username','')).strip()
             if not username: continue
-            con.execute('INSERT INTO users(username,display_name,email,password_hash,source,external_id,role,language,communication_language,email_enabled,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(username) DO UPDATE SET display_name=excluded.display_name,email=excluded.email,source=excluded.source,external_id=excluded.external_id,updated_at=excluded.updated_at', (username,str(item.get('display_name','')),str(item.get('email','')),'','ldap',str(item.get('dn','')),role,APP_LANGUAGE_DEFAULT,COMMUNICATION_LANGUAGE_DEFAULT,1,1,now,now)); imported+=1
+            con.execute('INSERT INTO users(username,display_name,email,password_hash,source,external_id,role,language,communication_language,email_enabled,active,ldap_direct_access,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(username) DO UPDATE SET display_name=excluded.display_name,email=excluded.email,source=excluded.source,external_id=excluded.external_id,role=excluded.role,ldap_direct_access=1,updated_at=excluded.updated_at', (username,str(item.get('display_name','')),str(item.get('email','')),'','ldap',str(item.get('dn','')),role,APP_LANGUAGE_DEFAULT,COMMUNICATION_LANGUAGE_DEFAULT,1,1,1,now,now)); imported+=1
     return {'imported':imported}
 
 @app.post('/api/admin/oidc/test')
@@ -1960,12 +1968,14 @@ async def local_login(payload:LocalLoginRequest):
         cfg=runtime_config()
         if cfg['ldap_enabled']:
             try:
-                profile=ldap_authenticate_and_profile(payload.username,payload.password,cfg)
+                direct_access=bool(row['ldap_direct_access']) if 'ldap_direct_access' in row.keys() else False
+                profile=ldap_authenticate_and_profile(payload.username,payload.password,cfg,require_mapped_group=not direct_access)
                 authenticated=bool(profile)
                 if profile:
                     now=now_local().isoformat(timespec='seconds')
+                    resolved_role=profile['role'] if profile.get('matched_groups') else row['role']
                     with db() as con:
-                        con.execute('UPDATE users SET display_name=?,email=?,external_id=?,role=?,updated_at=? WHERE id=?',(profile['display_name'],profile['email'],profile['dn'],profile['role'],now,row['id']))
+                        con.execute('UPDATE users SET display_name=?,email=?,external_id=?,role=?,updated_at=? WHERE id=?',(profile['display_name'],profile['email'],profile['dn'],resolved_role,now,row['id']))
                         row=con.execute('SELECT * FROM users WHERE id=?',(row['id'],)).fetchone()
                     log_event('ldap','success','LDAP account synchronized at login',f"user={profile['username']}; matched_groups={','.join(profile.get('matched_groups', [])) or '-'}; role={profile['role']}")
             except Exception as exc:
@@ -1993,6 +2003,7 @@ async def update_profile(payload:ProfileUpdateRequest, authorization: str | None
 @app.get('/api/reports/summary')
 async def reports_summary(days:int=Query(30,ge=1,le=365),authorization: str | None = Header(default=None)):
     require_admin_or_user_admin(authorization)
+    cfg=runtime_config()
     issues=[i for i in cache.get('issues',[]) if (i.get('category') or {}).get('reports',True)]
     today=now_local().date()
     past_start=today-timedelta(days=days-1)
