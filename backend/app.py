@@ -34,7 +34,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-APP_VERSION = "5.3.3"
+APP_VERSION = "5.3.4"
 app = FastAPI(title="MEP Planner API", version=APP_VERSION)
 oidc_states: dict[str, dict[str, Any]] = {}
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -581,6 +581,11 @@ def init_db() -> None:
           ON notifications(issue_id, issue_version, notification_type, recipient_key)
           WHERE manual = 0 AND status = 'sent';
         CREATE INDEX IF NOT EXISTS idx_notification_issue ON notifications(issue_id, sent_at DESC);
+        CREATE TABLE IF NOT EXISTS terminal_redmine_issues (
+          issue_id INTEGER PRIMARY KEY,
+          completed_at TEXT NOT NULL,
+          final_signature TEXT NOT NULL DEFAULT ''
+        );
         CREATE TABLE IF NOT EXISTS rollout_events (
           fingerprint TEXT PRIMARY KEY,
           project TEXT NOT NULL DEFAULT '',
@@ -755,7 +760,36 @@ def priority_level(issue: dict[str,Any]) -> int:
     return 1
 
 def issue_signature(issue: dict[str,Any]) -> dict[str,Any]:
-    return {k:issue.get(k) for k in ('subject','status','priority','assigned_to','start_date','due_date','start_time','end_time','environment','estimated_hours','updated_on','category_key')}
+    # Only business fields should trigger automatic notifications. Redmine's
+    # updated_on also changes for comments/journal activity and must therefore
+    # not be used as a communication version.
+    return {k:issue.get(k) for k in ('subject','status','priority','assigned_to','start_date','due_date','start_time','end_time','environment','estimated_hours','description','category_key')}
+
+def terminal_issue_ids() -> set[int]:
+    with db() as con:
+        return {int(r['issue_id']) for r in con.execute('SELECT issue_id FROM terminal_redmine_issues').fetchall()}
+
+def mark_terminal_issue(issue: dict[str,Any]) -> None:
+    issue_id=int(issue.get('id'))
+    signature=json.dumps(issue_signature(issue),sort_keys=True,ensure_ascii=False)
+    with db() as con:
+        con.execute(
+            'INSERT INTO terminal_redmine_issues(issue_id,completed_at,final_signature) VALUES(?,?,?) '
+            'ON CONFLICT(issue_id) DO NOTHING',
+            (issue_id,now_local().isoformat(timespec='seconds'),signature)
+        )
+
+def seed_terminal_issues(issues: list[dict[str,Any]]) -> None:
+    # On startup, every ticket already in a terminal status is registered as
+    # terminal without generating historical notifications.
+    now=now_local().isoformat(timespec='seconds')
+    with db() as con:
+        for issue in issues:
+            if is_done(issue):
+                con.execute(
+                    'INSERT OR IGNORE INTO terminal_redmine_issues(issue_id,completed_at,final_signature) VALUES(?,?,?)',
+                    (int(issue['id']),now,json.dumps(issue_signature(issue),sort_keys=True,ensure_ascii=False))
+                )
 
 def issue_version(issue: dict[str,Any]) -> str:
     payload=json.dumps(issue_signature(issue),sort_keys=True,ensure_ascii=False).encode(); return hashlib.sha256(payload).hexdigest()[:24]
@@ -1087,22 +1121,60 @@ async def send_change_notifications(previous,current,issues):
     cfg=runtime_config(); recipients=[v.strip() for v in str(cfg.get('smtp_recipients') or '').split(';') if v.strip()]
     if not previous:return
     by_id={str(i['id']):i for i in issues}
+    terminal=terminal_issue_ids()
+
+    # A ticket discovered for the first time while already Done/Closed is
+    # historical data. It must never be announced as a new action.
     for key in [k for k in current if k not in previous]:
-        issue=by_id[key]; category=issue.get('category') or {}
+        issue=by_id[key]
+        if int(issue['id']) in terminal:
+            continue
+        if is_done(issue):
+            mark_terminal_issue(issue)
+            terminal.add(int(issue['id']))
+            log_event('redmine','info','Terminal Redmine action registered without notification',f'#{key} status={issue.get("status","")}')
+            continue
+        category=issue.get('category') or {}
         if not category.get('notify',True): continue
         label=category.get('label_fr') if communication_language()=='fr' else category.get('label_en')
         if cfg.get('smtp_enabled') and recipients:
             try: await asyncio.to_thread(deliver,issue,'new',f"{tr('Nouvelle action planifiée','New scheduled action')} — {label} - #{key}",tr('Une nouvelle action planifiée a été détectée.','A new scheduled action has been detected.'),recipients,False,True,'')
             except Exception as e: log_event('smtp','error','New Redmine action notification failed',f'#{key}: {e}')
         await maybe_matrix(issue, 'new')
+
     for key in [k for k in current if k in previous and current[k]!=previous[k]]:
-        issue=by_id[key]; category=issue.get('category') or {}
-        if not category.get('notify',True): continue
+        issue=by_id[key]
+        issue_id=int(issue['id'])
+        previous_status=str((previous.get(key) or {}).get('status') or '').strip().casefold()
+        previous_done=previous_status in DONE_STATUSES
+        current_done=is_done(issue)
+
+        # Once an action has reached a terminal state, automatic communication
+        # is permanently locked for that Redmine ticket. This also protects
+        # against comments, journal updates, restarts and later reopenings.
+        if issue_id in terminal or previous_done:
+            if issue_id not in terminal:
+                mark_terminal_issue(issue)
+                terminal.add(issue_id)
+            continue
+
+        category=issue.get('category') or {}
+        if not category.get('notify',True):
+            if current_done:
+                mark_terminal_issue(issue); terminal.add(issue_id)
+            continue
+
         label=category.get('label_fr') if communication_language()=='fr' else category.get('label_en')
         if cfg.get('smtp_enabled') and recipients:
             try: await asyncio.to_thread(deliver,issue,'changed',f"{tr('Action modifiée','Action updated')} — {label} - #{key}",tr('Les informations de cette action ont été modifiées.','The information for this action has been updated.'),recipients,False,True,'')
             except Exception as e: log_event('smtp','error','Changed Redmine action notification failed',f'#{key}: {e}')
         await maybe_matrix(issue, 'changed')
+
+        # The transition to Done/Closed is the final automatic notification.
+        if current_done:
+            mark_terminal_issue(issue)
+            terminal.add(issue_id)
+            log_event('redmine','info','Automatic notifications locked for terminal Redmine action',f'#{key} status={issue.get("status","")}')
 
 async def synchronize(initial=False):
     global cache
@@ -1113,7 +1185,10 @@ async def synchronize(initial=False):
         try:
             mode,issues,pages,tickets=await fetch_redmine();previous=load_json(STATE_FILE,{});current={str(i['id']):issue_signature(i) for i in issues};cache={'mode':mode,'issues':issues,'last_sync':now_local().isoformat(timespec='seconds'),'last_attempt':cache['last_attempt'],'error':None,'pages_read':pages,'tickets_read':tickets};save_json(STATE_FILE,current)
             log_event('redmine','success','Synchronization completed', f'mode={mode}; pages={pages}; tickets={tickets}; mep={len(issues)}')
-            if not initial:await send_change_notifications(previous,current,issues)
+            if initial:
+                seed_terminal_issues(issues)
+            else:
+                await send_change_notifications(previous,current,issues)
         except Exception as e:
             cache['error']=f'{type(e).__name__}: {e}'
             log_event('redmine','error','Synchronization failed', cache['error'])
@@ -2000,6 +2075,54 @@ async def update_profile(payload:ProfileUpdateRequest, authorization: str | None
         con.execute('UPDATE users SET language=?,communication_language=?,email_enabled=?,password_hash=?,updated_at=? WHERE id=?',(payload.language,payload.communication_language,int(payload.email_enabled),password_hash,now,user['id'])); updated=con.execute('SELECT * FROM users WHERE id=?',(user['id'],)).fetchone()
     return serialize_user(updated)
 
+def parse_rollout_date(value: Any) -> date | None:
+    raw=str(value or '').strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace('Z','+00:00')).date()
+    except Exception:
+        try:
+            return datetime.strptime(raw[:19],'%Y-%m-%d %H:%M:%S').date()
+        except Exception:
+            return None
+
+async def rollouts_for_report_period(start_date: date, end_date: date) -> list[dict[str,Any]]:
+    """Read Rollout Logger with pagination so reports are not limited to the
+    100 records kept by the notification watcher."""
+    cfg=runtime_config()
+    if not (cfg.get('rollout_logger_enabled') and cfg.get('rollout_logger_include_reports')):
+        return []
+    collected=[]
+    offset=0
+    try:
+        for _ in range(50):  # up to 5,000 rollouts per report request
+            batch=await fetch_rollouts({'limit':100,'offset':offset})
+            if not batch:
+                break
+            oldest=None
+            for rollout in batch:
+                d=parse_rollout_date(rollout.get('date'))
+                if d is None:
+                    continue
+                oldest=d if oldest is None or d<oldest else oldest
+                if start_date <= d <= end_date:
+                    collected.append(rollout)
+            if len(batch)<100 or (oldest is not None and oldest<start_date):
+                break
+            offset+=len(batch)
+        return collected
+    except Exception as exc:
+        # Reporting must remain available when Rollout Logger is temporarily
+        # unreachable. Fall back to locally known rollout events.
+        log_event('rollout_logger','warning','Report query failed, using local rollout cache',f'{type(exc).__name__}: {exc}')
+        with db() as con:
+            rows=con.execute('SELECT project,environment,version,requester,rollout_date FROM rollout_events WHERE rollout_date>=? ORDER BY rollout_date ASC',(start_date.isoformat(),)).fetchall()
+        return [
+            {'project':r['project'],'environment':r['environment'],'version':r['version'],'requester':r['requester'],'date':r['rollout_date']}
+            for r in rows if (parse_rollout_date(r['rollout_date']) is not None and start_date <= parse_rollout_date(r['rollout_date']) <= end_date)
+        ]
+
 @app.get('/api/reports/summary')
 async def reports_summary(days:int=Query(30,ge=1,le=365),authorization: str | None = Header(default=None)):
     require_admin_or_user_admin(authorization)
@@ -2028,25 +2151,19 @@ async def reports_summary(days:int=Query(30,ge=1,le=365),authorization: str | No
         except Exception:
             continue
 
-        # Past series: releases occurring during the selected past period.
         if past_start <= issue_date <= today:
             past_issues.append(i)
             completed_daily[issue_date.isoformat()]+=1
 
-        # Future series: releases scheduled during the selected future period.
         if today <= issue_date <= future_end:
             upcoming.append(i)
             scheduled_daily[issue_date.isoformat()]+=1
 
-        # Breakdown charts use the complete selected window:
-        # selected past period + today + selected future period.
         if past_start <= issue_date <= future_end:
             report_scope.append(i)
-
             env=(i.get('environment') or 'Unspecified').strip()
             priority=(i.get('priority') or 'Normal').strip()
             status=(i.get('status') or 'Unspecified').strip()
-
             by_env[env]=by_env.get(env,0)+1
             by_priority[priority]=by_priority.get(priority,0)+1
             by_status[status]=by_status.get(status,0)+1
@@ -2054,28 +2171,46 @@ async def reports_summary(days:int=Query(30,ge=1,le=365),authorization: str | No
             category_label=category.get('label_en') if communication_language()=='en' else category.get('label_fr')
             category_label=category_label or i.get('category_key') or 'Redmine'
             by_category[category_label]=by_category.get(category_label,0)+1
-
             if i.get('start_time'):
                 scheduled_count+=1
 
-    releases=len(report_scope)
-    schedule_quality=round((scheduled_count/releases)*100,1) if releases else 0
+    # Rollout Logger represents deployments that were actually performed by
+    # BO/FO. They are therefore counted as completed MEPs, never as scheduled
+    # actions and never in the Redmine priority statistics.
+    rollout_count=0
+    rollout_rows=await rollouts_for_report_period(past_start,today)
+    for rollout in rollout_rows:
+        rollout_date=parse_rollout_date(rollout.get('date'))
+        if rollout_date is None:
+            continue
+        rollout_count+=1
+        completed_daily[rollout_date.isoformat()]+=1
+        env=(str(rollout.get('environment') or 'Unspecified').strip() or 'Unspecified')
+        by_env[env]=by_env.get(env,0)+1
+
+    if rollout_count:
+        deployed_label=tr('Déployée','Deployed')
+        rollout_label='Rollout Logger BO/FO'
+        by_status[deployed_label]=by_status.get(deployed_label,0)+rollout_count
+        by_category[rollout_label]=by_category.get(rollout_label,0)+rollout_count
+
+    redmine_releases=len(report_scope)
+    releases=redmine_releases+rollout_count
+    schedule_quality=round((scheduled_count/redmine_releases)*100,1) if redmine_releases else 0
     cutoff=past_start.isoformat()
 
     with db() as con:
-        rollout_rows=con.execute("SELECT rollout_date FROM rollout_events WHERE rollout_date>=?",(cutoff,)).fetchall()
-        rollout_count=len(rollout_rows) if cfg.get('rollout_logger_include_reports') else 0
-        if cfg.get('rollout_logger_include_reports'): by_category['Rollout Logger']=rollout_count
         smtp_ok=con.execute("SELECT COUNT(*) AS c FROM notifications WHERE sent_at>=? AND status='sent'",(cutoff,)).fetchone()['c']
         smtp_ko=con.execute("SELECT COUNT(*) AS c FROM notifications WHERE sent_at>=? AND status='error'",(cutoff,)).fetchone()['c']
 
     return {
         'days':days,
         'releases':releases,
-        'past_releases':len(past_issues),
+        'redmine_releases':redmine_releases,
+        'past_releases':len(past_issues)+rollout_count,
         'upcoming_releases':len(upcoming),
         'without_time':sum(1 for i in report_scope if not i.get('start_time')),
-        'urgent':sum(1 for i in report_scope if (i.get('priority_level') or 1)>=3),
+        'urgent':sum(1 for i in report_scope if priority_level(i)>=3),
         'schedule_quality':schedule_quality,
         'by_environment':by_env,
         'by_priority':by_priority,

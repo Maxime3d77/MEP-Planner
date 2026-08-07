@@ -1,5 +1,18 @@
 # Changelog
 
+## v5.3.4
+
+### Fixed
+- Automatic Redmine notifications are now permanently locked after an action reaches a terminal status (`Done`, `Closed`, `Resolved`, etc.).
+- The transition to a terminal status still sends one final modification notification.
+- Redmine journal/comment updates no longer trigger notifications because `updated_on` is excluded from the business signature.
+- Tickets already terminal at startup are registered silently and cannot be re-announced as new actions.
+
+### Changed
+- Rollout Logger deployments are counted as completed BO/FO MEPs in Reports.
+- Rollouts are included in completed timelines, environment statistics, status statistics (`Deployed`) and source/category statistics.
+- Rollouts remain excluded from scheduled and priority statistics.
+
 ## v5.3.3
 
 ### Fixed
