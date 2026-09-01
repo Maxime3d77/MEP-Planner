@@ -1,5 +1,16 @@
 # Changelog
 
+## v5.3.5
+
+- Calendar now merges scheduled and completed Redmine actions for every enabled dynamic category.
+- Completed DC actions and any future Redmine categories remain visible in dashboard/day/month calendars.
+- Added a dynamic calendar history-type filter (all Redmine categories plus Rollout Logger).
+- Added a dynamic legend using each configured category color.
+- Today view now includes completed Redmine actions for the current day.
+- Improved collision layout with a readable minimum event height.
+- Completed Redmine events are visually marked with a check.
+
+
 ## v5.3.4
 
 ### Fixed

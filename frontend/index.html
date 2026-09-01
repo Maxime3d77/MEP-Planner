@@ -20,7 +20,7 @@
 <button class="primary-action" data-en="Sign in" data-fr="Se connecter" id="mainLoginSubmit" type="submit">Se connecter</button>
 <div class="login-result" id="mainLoginResult" role="alert"></div><div class="oidc-login hidden" id="oidcLoginArea"><div class="login-separator"><span>ou</span></div><a class="secondary oidc-button" href="/api/auth/oidc/login" id="oidcLoginButton">Connexion SSO / OIDC</a></div>
 </form>
-<div class="login-footer"><span>MEP Planner</span><span>v5.3.4</span></div>
+<div class="login-footer"><span>MEP Planner</span><span>v5.3.5</span></div>
 </div>
 </section>
 <div class="layout hidden" id="appLayout">
@@ -59,7 +59,7 @@
 <div class="table-wrap"><table><thead id="thead"></thead><tbody id="rows"></tbody></table></div><div class="inline-actions history-more hidden" id="historyMoreWrap"><button class="secondary" id="loadMoreRollouts" type="button" data-en="Load more deployments" data-fr="Charger plus de déploiements">Charger plus de déploiements</button><span id="rolloutHistoryStatus"></span></div>
 </section>
 <section class="panel" id="calendarPanel">
-<div class="panel-head"><div><h2 id="calendarTitle">Planning</h2><p id="calendarHelp">Les actions sans heure restent dans la zone « Heure à préciser »</p></div><div class="calendar-actions"><button id="prev">‹</button><button id="todayBtn">Aujourd’hui</button><button id="next">›</button><div class="segmented"><button data-cal="day">Jour</button><button class="active" data-cal="week">Semaine</button><button data-cal="month">Mois</button></div></div></div>
+<div class="panel-head calendar-panel-head"><div><h2 id="calendarTitle">Planning</h2><p id="calendarHelp">Les actions sans heure restent dans la zone « Heure à préciser »</p><div id="calendarLegend" class="calendar-legend"></div></div><div class="calendar-actions"><label class="calendar-type-filter"><span id="calendarTypeFilterLabel">Type d’historique</span><select id="calendarTypeFilter"><option value="">Tous</option></select></label><button id="prev">‹</button><button id="todayBtn">Aujourd’hui</button><button id="next">›</button><div class="segmented"><button data-cal="day">Jour</button><button class="active" data-cal="week">Semaine</button><button data-cal="month">Mois</button></div></div></div>
 <div id="calendar"></div>
 </section>
 <section class="settings-view hidden" id="settingsView">

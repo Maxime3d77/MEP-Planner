@@ -5,7 +5,7 @@
 <h1 align="center">MEP Planner</h1>
 <p align="center"><strong>Plan smarter. Deploy with confidence.</strong></p>
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-5.3.4-4ade80">
+  <img alt="Version" src="https://img.shields.io/badge/version-5.3.5-4ade80">
   <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-blue">
   <img alt="Docker" src="https://img.shields.io/badge/deployment-Docker-2496ED">
   <img alt="Languages" src="https://img.shields.io/badge/UI-FR%20%7C%20EN-8b5cf6">
