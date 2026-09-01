@@ -1,5 +1,14 @@
 # Changelog
 
+## v5.3.7
+
+- Correction du calendrier du tableau de bord : les historiques Redmine terminés restent visibles avec les entrées actives.
+- Le filtre « Type d’historique » est maintenant généré à partir des catégories Redmine dynamiques activées pour l’historique.
+- La configuration dynamique courante est utilisée comme source de vérité pour le libellé et la couleur des événements du calendrier.
+- Déduplication des tickets Redmine présents à la fois dans les jeux actif/historique.
+- Rollout Logger reste une source séparée et filtrable lorsqu’il est activé pour le calendrier.
+- Correction du démarrage backend : import explicite de `date` utilisé par les rapports Rollout Logger.
+
 ## v5.3.6
 
 - Calendar now merges scheduled and completed Redmine actions for every enabled dynamic category.
