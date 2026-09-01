@@ -1,5 +1,14 @@
 # Changelog
 
+## v5.3.8
+
+- Correction robuste du calendrier du tableau de bord : aucune entrée Redmine n’est supprimée lorsque la liste `categories` de l’API est vide ou incomplète.
+- Les catégories du filtre sont reconstruites dynamiquement depuis la configuration ET depuis les tickets Redmine actifs/terminés déjà chargés.
+- Les options `enabled`, `history` et `calendar` restent prioritaires lorsqu’une catégorie est explicitement configurée.
+- Le filtre « Type d’historique » affiche désormais un compteur par source afin de rendre immédiatement visible le nombre d’entrées Redmine/BO-FO chargées.
+- « Tous » inclut toujours les tickets Redmine suivis, même si leurs métadonnées de catégorie sont momentanément absentes.
+- Conservation du correctif backend `from datetime import date`.
+
 ## v5.3.7
 
 - Correction du calendrier du tableau de bord : les historiques Redmine terminés restent visibles avec les entrées actives.

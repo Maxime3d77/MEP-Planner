@@ -197,15 +197,48 @@ function categoryHistoryLabel(category){return language==='en'?(category?.histor
 function currentHistoryCategory(){return view.startsWith('history:')?view.split(':')[1]:null}
 function rolloutHistoryLabel(){return language==='en'?(rolloutConfig.history_label_en||'BO/FO history'):(rolloutConfig.history_label_fr||'Historique BO/FO')}
 function renderCategoryNavigation(){const box=$('categoryHistoryNav');if(!box)return;const redmineMenus=redmineCategories.filter(c=>c.enabled!==false&&c.menu!==false&&c.history!==false).map(c=>`<button class="nav category-history-nav" data-category="${esc(c.key)}" style="--category-color:${esc(c.color||'#5b7cfa')}"><span class="category-dot"></span>${esc(categoryHistoryLabel(c))}</button>`).join('');const rolloutMenu=rolloutConfig.enabled&&rolloutConfig.show_menu?`<button class="nav category-history-nav rollout-history-nav" data-rollout-history="1" style="--category-color:#7c5cff"><span class="category-dot"></span>${esc(rolloutHistoryLabel())}</button>`:'';box.innerHTML=redmineMenus+rolloutMenu;box.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));b.classList.add('active');view='history:'+b.dataset.category;render()});box.querySelectorAll('[data-rollout-history]').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));b.classList.add('active');view='history:rollout';render()})}
-function calendarCategoryKey(i){return i.source==='rollout_logger'?'rollout':(i.category_key||(i.category||{}).key||'')}
-function calendarRedmineCategories(){return redmineCategories.filter(c=>c.enabled!==false&&c.history!==false)}
-function calendarItems(){
- const configured=calendarRedmineCategories(),byKey=new Map(configured.map(c=>[c.key,c])),allowed=new Set(byKey.keys()),seen=new Set();
- // The dashboard calendar is an activity/history calendar: it must keep completed Redmine
- // tickets visible and use the current dynamic category configuration as the source of truth.
- const redmine=[...active,...historyIssues].filter(i=>allowed.has(i.category_key||(i.category||{}).key||'')).filter(i=>{const k=`redmine:${i.id}`;if(seen.has(k))return false;seen.add(k);return true}).map(i=>{const key=i.category_key||(i.category||{}).key||'',category=byKey.get(key)||i.category||{};return {...i,category_key:key,category,source:'redmine',completed:isDoneClient(i)}});
+function calendarCategoryKey(i){return i.source==='rollout_logger'?'rollout':(i.category_key||(i.category||{}).key||'redmine-other')}
+function calendarRedmineCategories(){
+ // Configuration is authoritative when available, but calendar rendering must never
+ // drop Redmine history just because /api/issues.categories is temporarily empty or
+ // incomplete. Categories embedded in loaded issues are therefore used as fallback.
+ const configuredByKey=new Map(redmineCategories.filter(c=>c&&c.key).map(c=>[c.key,c]));
+ const result=new Map();
+ for(const c of redmineCategories){
+  if(!c||!c.key||c.enabled===false||c.history===false||c.calendar===false)continue;
+  result.set(c.key,c);
+ }
+ for(const i of [...active,...historyIssues]){
+  const embedded=i.category||{},key=i.category_key||embedded.key||'';
+  if(!key)continue;
+  if(configuredByKey.has(key)){
+   const cfg=configuredByKey.get(key);
+   if(cfg.enabled===false||cfg.history===false||cfg.calendar===false)continue;
+   if(!result.has(key))result.set(key,cfg);
+   continue;
+  }
+  if(embedded.enabled===false||embedded.history===false||embedded.calendar===false)continue;
+  if(!result.has(key))result.set(key,{...embedded,key,tag:embedded.tag||key,label_fr:embedded.label_fr||embedded.tag||key,label_en:embedded.label_en||embedded.tag||key,history_fr:embedded.history_fr||`Historique ${embedded.tag||key}`,history_en:embedded.history_en||`${embedded.tag||key} history`,color:embedded.color||'#5b7cfa',enabled:true,history:true,calendar:true});
+ }
+ return [...result.values()].sort((a,b)=>(Number(a.order||9999)-Number(b.order||9999))||categoryHistoryLabel(a).localeCompare(categoryHistoryLabel(b),locale()))
+}
+function calendarItems(applyTypeFilter=true){
+ const configuredByKey=new Map(redmineCategories.filter(c=>c&&c.key).map(c=>[c.key,c]));
+ const available=calendarRedmineCategories(),byKey=new Map(available.map(c=>[c.key,c])),seen=new Set();
+ const redmine=[];
+ for(const i of [...active,...historyIssues]){
+  const key=i.category_key||(i.category||{}).key||'';
+  const cfg=key?configuredByKey.get(key):null;
+  // Explicitly disabled categories are excluded. Missing category metadata is NOT a
+  // reason to hide a Redmine event from the global "Tous" calendar.
+  if(cfg&&(cfg.enabled===false||cfg.history===false||cfg.calendar===false))continue;
+  const dedupe=`redmine:${i.id}`;if(seen.has(dedupe))continue;seen.add(dedupe);
+  const category=byKey.get(key)||cfg||i.category||{key:key||'redmine-other',tag:'Redmine',label_fr:'Autres Redmine',label_en:'Other Redmine',history_fr:'Autres Redmine',history_en:'Other Redmine',color:'#5b7cfa'};
+  redmine.push({...i,category_key:key||'redmine-other',category,source:'redmine',completed:isDoneClient(i)});
+ }
  const rollout=(rolloutConfig.enabled&&rolloutConfig.show_calendar?rolloutIssues:[]).map((r,idx)=>{const d=rolloutDate(r);return {...r,id:`rollout-${idx}`,subject:`${r.project||'—'} · ${r.version||'—'}`,start_date:d?iso(d):String(r.date||'').slice(0,10),start_time:d?`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`:null,end_time:null,estimated_hours:.5,priority_level:1,category:{key:'rollout',color:'#7c5cff',label_fr:rolloutHistoryLabel(),label_en:rolloutHistoryLabel()},source:'rollout_logger',completed:true}});
- return [...redmine,...rollout].filter(i=>!calendarTypeFilter||calendarCategoryKey(i)===calendarTypeFilter)
+ const items=[...redmine,...rollout];
+ return applyTypeFilter&&calendarTypeFilter?items.filter(i=>calendarCategoryKey(i)===calendarTypeFilter):items
 }
 function isDoneClient(i){const s=String(i?.status||'').trim().toLowerCase();return ['done','closed','fermé','fermée','terminé','terminée','resolved','résolu','résolue'].includes(s)}
 function filtered(){const historyKey=currentHistoryCategory(),src=historyKey?historyIssues.filter(i=>i.category_key===historyKey):(view==='today'?[...active,...historyIssues]:active),e=$('env').value,s=$('status').value,p=$('priority').value,t=$('timeFilter').value,q=$('search').value.toLowerCase();return src.filter(i=>(view!=='today'||i.start_date===TODAY)&&(!e||i.environment===e)&&(!s||i.status===s)&&(!p||i.priority===p)&&(!t||(t==='defined'?!!i.start_time:!i.start_time))&&(!q||`${i.id} ${i.subject} ${i.author} ${i.assigned_to} ${i.environment} ${(i.notification?.recipients||[]).join(' ')}`.toLowerCase().includes(q))).sort((a,b)=>`${a.start_date}${a.start_time||'99:99'}`.localeCompare(`${b.start_date}${b.start_time||'99:99'}`))}
@@ -243,7 +276,7 @@ function renderIssues(){if(view==='today'){calMode='day';cursor=new Date(TODAY+'
 function renderNotifications(){const q=$('search').value.toLowerCase();$('listTitle').textContent=tr('communicationHistory');$('listSubtitle').textContent=tr('manualVsAuto');$('thead').innerHTML=`<tr><th>${tr('date')}</th><th>${tr('ticket')}</th><th>${tr('type')}</th><th>${tr('subject')}</th><th>${tr('recipients')}</th><th>${tr('state')}</th><th>PDF</th></tr>`;$('rows').innerHTML=notifications.filter(n=>!q||`${n.issue_id} ${n.subject} ${n.recipients} ${n.status}`.toLowerCase().includes(q)).map(n=>`<tr><td>${new Date(n.sent_at).toLocaleString(locale())}</td><td>${n.issue_id?'#'+n.issue_id:'—'}</td><td>${n.manual?tr('manual'):esc(n.notification_type)}</td><td>${esc(n.subject)}</td><td>${esc(n.recipients)}</td><td><span class="${n.status==='sent'?'mail-ok':'mail-ko'}">${n.status==='sent'?tr('sent'):tr('error')}</span>${n.error?`<small>${esc(n.error)}</small>`:''}</td><td>${n.pdf_attached?'✓':'—'}</td></tr>`).join('')||`<tr><td colspan="7" class="empty">${tr('noneCommunication')}</td></tr>`}
 function weekStart(d){const x=new Date(d),n=(x.getDay()+6)%7;x.setDate(x.getDate()-n);x.setHours(12,0,0,0);return x}
 function calendarIssues(){const allowed=new Set(calendarRedmineCategories().map(c=>c.key));return [...active,...historyIssues].filter(i=>allowed.has(i.category_key||(i.category||{}).key||''))}
-function renderCalendarTypeFilter(){const select=$('calendarTypeFilter'),legend=$('calendarLegend');if(!select)return;const options=calendarRedmineCategories().map(c=>({key:c.key,label:categoryHistoryLabel(c),color:c.color||'#5b7cfa'}));if(rolloutConfig.enabled&&rolloutConfig.show_calendar)options.push({key:'rollout',label:rolloutHistoryLabel(),color:'#7c5cff'});if(calendarTypeFilter&&!options.some(o=>o.key===calendarTypeFilter))calendarTypeFilter='';select.innerHTML=`<option value="">${esc(tr('allHistoryTypes'))}</option>`+options.map(o=>`<option value="${esc(o.key)}">${esc(o.label)}</option>`).join('');select.value=calendarTypeFilter;if($('calendarTypeFilterLabel'))$('calendarTypeFilterLabel').textContent=tr('calendarType');if(legend)legend.innerHTML=options.map(o=>`<span style="--legend-color:${esc(o.color)}"><i></i>${esc(o.label)}</span>`).join('')}
+function renderCalendarTypeFilter(){const select=$('calendarTypeFilter'),legend=$('calendarLegend');if(!select)return;const all=calendarItems(false),counts=new Map();for(const i of all){const k=calendarCategoryKey(i);counts.set(k,(counts.get(k)||0)+1)}const options=calendarRedmineCategories().map(c=>({key:c.key,label:categoryHistoryLabel(c),color:c.color||'#5b7cfa',count:counts.get(c.key)||0}));if(counts.get('redmine-other'))options.push({key:'redmine-other',label:language==='en'?'Other Redmine':'Autres Redmine',color:'#5b7cfa',count:counts.get('redmine-other')});if(rolloutConfig.enabled&&rolloutConfig.show_calendar)options.push({key:'rollout',label:rolloutHistoryLabel(),color:'#7c5cff',count:counts.get('rollout')||0});if(calendarTypeFilter&&!options.some(o=>o.key===calendarTypeFilter))calendarTypeFilter='';select.innerHTML=`<option value="">${esc(tr('allHistoryTypes'))} (${all.length})</option>`+options.map(o=>`<option value="${esc(o.key)}">${esc(o.label)} (${o.count})</option>`).join('');select.value=calendarTypeFilter;if($('calendarTypeFilterLabel'))$('calendarTypeFilterLabel').textContent=tr('calendarType');if(legend)legend.innerHTML=options.map(o=>`<span style="--legend-color:${esc(o.color)}"><i></i>${esc(o.label)} <small>${o.count}</small></span>`).join('')}
 function renderCalendar(){if(view.startsWith('history')||view==='communications')return;renderCalendarTypeFilter();document.querySelectorAll('[data-cal]').forEach(b=>b.classList.toggle('active',b.dataset.cal===calMode));calMode==='day'?dayCal():calMode==='month'?monthCal():weekCal()}
 function eventHtml(i,c='cal-event',style=''){const rollout=i.source==='rollout_logger',done=!rollout&&isDoneClient(i),color=(i.category||{}).color||'#5b7cfa',click=rollout?'':`onclick="openIssue(${i.id})"`,marker=rollout?'🚀':done?'✓ #'+i.id:'#'+i.id;return`<div class="${c} source-calendar ${rollout?'rollout-calendar':''} ${done?'completed-calendar':''} ${envClass(i.environment)} ${urgent(i)?'urgent':''}" style="--category-color:${esc(color)};${style||''}" ${click}>${i.start_time?esc(planningText(i))+' · ':''}${marker}<br>${esc(i.subject)}</div>`}
 function unscheduled(items){return items.length?`<div class="unscheduled"><strong>${tr('unscheduled')}</strong><div>${items.map(i=>eventHtml(i,'unscheduled-event')).join('')}</div></div>`:''}
