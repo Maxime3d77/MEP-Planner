@@ -1,6 +1,6 @@
 # Changelog
 
-## v5.3.5
+## v5.3.6
 
 - Calendar now merges scheduled and completed Redmine actions for every enabled dynamic category.
 - Completed DC actions and any future Redmine categories remain visible in dashboard/day/month calendars.

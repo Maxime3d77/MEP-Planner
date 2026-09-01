@@ -69,21 +69,33 @@ fi
 
 printf '5/7 Reconstruction des conteneurs…\n'
 docker compose build --pull
-docker compose up -d --remove-orphans
+# Recreate the three services together so nginx always resolves the current
+# backend container instead of keeping an obsolete Docker IP.
+docker compose up -d --remove-orphans --force-recreate backend frontend nginx
 
 printf '6/7 Contrôle de santé…\n'
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/api/health}"
-for _ in $(seq 1 30); do
-  if curl -fsS "$HEALTH_URL" >/dev/null; then
+HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-180}"
+HEALTH_STEP_SECONDS=5
+elapsed=0
+while (( elapsed < HEALTH_TIMEOUT_SECONDS )); do
+  if curl -fsS --max-time 4 "$HEALTH_URL" >/dev/null 2>&1; then
     printf '7/7 Mise à jour réussie vers %s.\n' "$TARGET_VERSION"
     exit 0
   fi
-  sleep 2
+  printf '   Backend en cours de démarrage… %ss/%ss\n' "$elapsed" "$HEALTH_TIMEOUT_SECONDS"
+  sleep "$HEALTH_STEP_SECONDS"
+  elapsed=$((elapsed + HEALTH_STEP_SECONDS))
 done
 
-echo 'Le contrôle de santé a échoué. Restauration du code précédent…' >&2
+echo 'Le contrôle de santé a échoué après le délai maximal.' >&2
+echo 'État des conteneurs :' >&2
+docker compose ps >&2 || true
+echo 'Dernières lignes du backend :' >&2
+docker compose logs --tail=80 backend >&2 || true
+echo 'Restauration du code précédent…' >&2
 tar -xzf "$CURRENT_ARCHIVE" -C "$ROOT_DIR"
 [[ -f "$BACKUP_DIR/.env" ]] && cp -a "$BACKUP_DIR/.env" "$ROOT_DIR/.env"
 docker compose build
-docker compose up -d --remove-orphans
+docker compose up -d --remove-orphans --force-recreate backend frontend nginx
 exit 1
