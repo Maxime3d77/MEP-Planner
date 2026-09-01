@@ -199,42 +199,47 @@ function rolloutHistoryLabel(){return language==='en'?(rolloutConfig.history_lab
 function renderCategoryNavigation(){const box=$('categoryHistoryNav');if(!box)return;const redmineMenus=redmineCategories.filter(c=>c.enabled!==false&&c.menu!==false&&c.history!==false).map(c=>`<button class="nav category-history-nav" data-category="${esc(c.key)}" style="--category-color:${esc(c.color||'#5b7cfa')}"><span class="category-dot"></span>${esc(categoryHistoryLabel(c))}</button>`).join('');const rolloutMenu=rolloutConfig.enabled&&rolloutConfig.show_menu?`<button class="nav category-history-nav rollout-history-nav" data-rollout-history="1" style="--category-color:#7c5cff"><span class="category-dot"></span>${esc(rolloutHistoryLabel())}</button>`:'';box.innerHTML=redmineMenus+rolloutMenu;box.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));b.classList.add('active');view='history:'+b.dataset.category;render()});box.querySelectorAll('[data-rollout-history]').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));b.classList.add('active');view='history:rollout';render()})}
 function calendarCategoryKey(i){return i.source==='rollout_logger'?'rollout':(i.category_key||(i.category||{}).key||'redmine-other')}
 function calendarRedmineCategories(){
- // Configuration is authoritative when available, but calendar rendering must never
- // drop Redmine history just because /api/issues.categories is temporarily empty or
- // incomplete. Categories embedded in loaded issues are therefore used as fallback.
+ // Build calendar filter categories from what is REALLY loaded first. This guarantees
+ // that a completed Redmine issue visible in a history page is also selectable in the
+ // dashboard calendar, even when an older/incomplete category configuration exists.
  const configuredByKey=new Map(redmineCategories.filter(c=>c&&c.key).map(c=>[c.key,c]));
  const result=new Map();
- for(const c of redmineCategories){
-  if(!c||!c.key||c.enabled===false||c.history===false||c.calendar===false)continue;
-  result.set(c.key,c);
- }
- for(const i of [...active,...historyIssues]){
+ const addObserved=i=>{
   const embedded=i.category||{},key=i.category_key||embedded.key||'';
-  if(!key)continue;
-  if(configuredByKey.has(key)){
-   const cfg=configuredByKey.get(key);
-   if(cfg.enabled===false||cfg.history===false||cfg.calendar===false)continue;
-   if(!result.has(key))result.set(key,cfg);
-   continue;
-  }
-  if(embedded.enabled===false||embedded.history===false||embedded.calendar===false)continue;
-  if(!result.has(key))result.set(key,{...embedded,key,tag:embedded.tag||key,label_fr:embedded.label_fr||embedded.tag||key,label_en:embedded.label_en||embedded.tag||key,history_fr:embedded.history_fr||`Historique ${embedded.tag||key}`,history_en:embedded.history_en||`${embedded.tag||key} history`,color:embedded.color||'#5b7cfa',enabled:true,history:true,calendar:true});
+  if(!key)return;
+  const cfg=configuredByKey.get(key)||{};
+  const observed={...cfg,...embedded,key,
+   tag:embedded.tag||cfg.tag||key,
+   label_fr:embedded.label_fr||cfg.label_fr||embedded.tag||cfg.tag||key,
+   label_en:embedded.label_en||cfg.label_en||embedded.tag||cfg.tag||key,
+   history_fr:embedded.history_fr||cfg.history_fr||`Historique ${embedded.tag||cfg.tag||key}`,
+   history_en:embedded.history_en||cfg.history_en||`${embedded.tag||cfg.tag||key} history`,
+   color:embedded.color||cfg.color||'#5b7cfa',enabled:true,history:true,calendar:true,
+   order:Number(embedded.order??cfg.order??9999)
+  };
+  result.set(key,{...(result.get(key)||{}),...observed});
+ };
+ // History is authoritative for history filters. Active issues are also included so a
+ // category can be selected before it has completed entries.
+ historyIssues.forEach(addObserved);
+ active.forEach(addObserved);
+ // Finally enrich with configured categories. Do not remove an observed history category.
+ for(const c of redmineCategories){
+  if(!c||!c.key||c.enabled===false)continue;
+  if(result.has(c.key))result.set(c.key,{...c,...result.get(c.key),key:c.key});
+  else if(c.calendar!==false||c.history!==false)result.set(c.key,c);
  }
  return [...result.values()].sort((a,b)=>(Number(a.order||9999)-Number(b.order||9999))||categoryHistoryLabel(a).localeCompare(categoryHistoryLabel(b),locale()))
 }
 function calendarItems(applyTypeFilter=true){
- const configuredByKey=new Map(redmineCategories.filter(c=>c&&c.key).map(c=>[c.key,c]));
- const available=calendarRedmineCategories(),byKey=new Map(available.map(c=>[c.key,c])),seen=new Set();
- const redmine=[];
+ const byKey=new Map(calendarRedmineCategories().map(c=>[c.key,c])),seen=new Set(),redmine=[];
+ // IMPORTANT: never discard an issue already loaded in Redmine history. If it is visible
+ // in Historique MEP/DC/etc., it must exist in the dashboard calendar source.
  for(const i of [...active,...historyIssues]){
-  const key=i.category_key||(i.category||{}).key||'';
-  const cfg=key?configuredByKey.get(key):null;
-  // Explicitly disabled categories are excluded. Missing category metadata is NOT a
-  // reason to hide a Redmine event from the global "Tous" calendar.
-  if(cfg&&(cfg.enabled===false||cfg.history===false||cfg.calendar===false))continue;
+  const embedded=i.category||{},key=i.category_key||embedded.key||'redmine-other';
   const dedupe=`redmine:${i.id}`;if(seen.has(dedupe))continue;seen.add(dedupe);
-  const category=byKey.get(key)||cfg||i.category||{key:key||'redmine-other',tag:'Redmine',label_fr:'Autres Redmine',label_en:'Other Redmine',history_fr:'Autres Redmine',history_en:'Other Redmine',color:'#5b7cfa'};
-  redmine.push({...i,category_key:key||'redmine-other',category,source:'redmine',completed:isDoneClient(i)});
+  const category=byKey.get(key)||{...embedded,key,tag:embedded.tag||key,label_fr:embedded.label_fr||embedded.tag||key,label_en:embedded.label_en||embedded.tag||key,history_fr:embedded.history_fr||`Historique ${embedded.tag||key}`,history_en:embedded.history_en||`${embedded.tag||key} history`,color:embedded.color||'#5b7cfa'};
+  redmine.push({...i,category_key:key,category,source:'redmine',completed:isDoneClient(i)});
  }
  const rollout=(rolloutConfig.enabled&&rolloutConfig.show_calendar?rolloutIssues:[]).map((r,idx)=>{const d=rolloutDate(r);return {...r,id:`rollout-${idx}`,subject:`${r.project||'—'} · ${r.version||'—'}`,start_date:d?iso(d):String(r.date||'').slice(0,10),start_time:d?`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`:null,end_time:null,estimated_hours:.5,priority_level:1,category:{key:'rollout',color:'#7c5cff',label_fr:rolloutHistoryLabel(),label_en:rolloutHistoryLabel()},source:'rollout_logger',completed:true}});
  const items=[...redmine,...rollout];

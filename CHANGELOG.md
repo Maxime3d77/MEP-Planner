@@ -1,5 +1,12 @@
 # Changelog
 
+## v5.3.9
+
+- Correction définitive du calendrier du tableau de bord : toutes les entrées Redmine déjà présentes dans les historiques sont injectées dans la source calendrier.
+- Le filtre Type d’historique est construit à partir des catégories réellement observées dans les tickets actifs/terminés puis enrichi avec la configuration dynamique.
+- Une ancienne configuration de catégorie incomplète ne peut plus masquer Historique MEP/DC dans le calendrier.
+- Ajout d’un cache-busting sur app.js/styles.css pour éviter qu’un navigateur conserve le frontend d’une version précédente.
+
 ## v5.3.8
 
 - Correction robuste du calendrier du tableau de bord : aucune entrée Redmine n’est supprimée lorsque la liste `categories` de l’API est vide ou incomplète.

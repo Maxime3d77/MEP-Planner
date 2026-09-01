@@ -6,7 +6,7 @@
 <meta content="width=device-width,initial-scale=1" name="viewport"/>
 <title>MEP Planner</title>
 <link href="/favicon.svg" rel="icon"/>
-<link href="/styles.css" rel="stylesheet"/>
+<link href="/styles.css?v=5.3.9" rel="stylesheet"/>
 </head>
 <body>
 <section class="login-screen" id="loginScreen">
@@ -332,6 +332,6 @@ Last name: sn</pre></details>
 <div class="dialog-actions"><button class="secondary" id="dialogCloseBottom">Fermer</button><a class="secondary" id="pdfLink" target="_blank">Voir le PDF</a><a id="d-link" rel="noopener" target="_blank">Ouvrir dans Redmine</a></div>
 </dialog>
 <dialog class="admin-dialog" id="adminDialog"><div class="dialog-head"><div><span id="adminEyebrow">ADMINISTRATION</span><h2 id="adminTitle">Accès aux paramètres</h2></div><button id="adminClose" type="button">✕</button></div><form class="admin-form" id="adminForm"><p id="adminHelp">Le mot de passe est défini par <code>ADMIN_PASSWORD</code> dans le fichier <code>.env</code>.</p><label><span id="adminPasswordLabel">Mot de passe administrateur</span><input autocomplete="current-password" autofocus="" id="adminPassword" required="" type="password"/></label><div id="adminResult"></div><div class="settings-actions"><button class="secondary" data-en="Cancel" data-fr="Annuler" id="adminCancel" type="button">Annuler</button><button class="primary-action compact" type="submit"><span class="send-icon">🔐</span><span><strong id="adminUnlockTitle">Déverrouiller</strong><small id="adminUnlockHint">Session temporaire</small></span></button></div></form></dialog>
-<script src="/app.js"></script>
+<script src="/app.js?v=5.3.9"></script>
 <dialog class="admin-dialog" id="userLoginDialog"><div class="dialog-head"><div><span data-en="SIGN IN" data-fr="CONNEXION">CONNEXION</span><h2 data-en="MEP Planner account" data-fr="Compte MEP Planner">Compte MEP Planner</h2></div><button id="userLoginClose" type="button">✕</button></div><form class="admin-form" id="userLoginForm"><label><span data-i18n="username">Identifiant</span><input autocomplete="username" id="loginUsername"/></label><label><span data-i18n="password">Mot de passe</span><input autocomplete="current-password" id="loginPassword" type="password"/></label><div id="loginResult"></div><div class="settings-actions" data-en="Sign in" data-fr="Se connecter"><button class="primary-action compact" data-en="Sign in" data-fr="Se connecter" type="submit">Se connecter</button></div></form></dialog></body>
 </html>
