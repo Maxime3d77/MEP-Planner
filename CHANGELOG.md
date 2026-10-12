@@ -1,4 +1,17 @@
+## v5.3.11
+- Règles dynamiques de mise en évidence Matrix par environnement (mot-clé, couleur, libellé, emoji, activation).
+- Appliquées aux notifications Redmine et Rollout Logger, avec priorité à la correspondance exacte et emoji de repli.
+- Validation serveur des règles et conservation des paramètres existants.
+
 # Changelog
+
+
+## v5.3.10 - 2026-09-01
+
+- Ajout d’une infobulle détaillée sur les événements du calendrier au survol et au focus clavier.
+- L’infobulle affiche le type d’historique, le sujet complet, l’horaire, l’environnement et les informations Redmine ou Rollout Logger disponibles.
+- Positionnement automatique de l’infobulle pour rester visible dans la fenêtre.
+- Cache-busting frontend mis à jour vers 5.3.10.
 
 ## v5.3.9
 

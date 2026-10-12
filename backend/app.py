@@ -35,7 +35,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-APP_VERSION = "5.3.9"
+APP_VERSION = "5.3.11"
 app = FastAPI(title="MEP Planner API", version=APP_VERSION)
 oidc_states: dict[str, dict[str, Any]] = {}
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -166,6 +166,7 @@ class BrandingSettings(BaseModel):
     matrix_notify_new: bool = True
     matrix_notify_changed: bool = True
     matrix_notify_daily: bool = False
+    matrix_color_rules_json: str = ""
 
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
 ADMIN_SESSION_HOURS = max(1, int(os.getenv("ADMIN_SESSION_HOURS", "8")))
@@ -545,6 +546,7 @@ def branding_settings() -> dict[str, Any]:
         "matrix_notify_new": get_setting("matrix_notify_new", str(MATRIX_NOTIFY_NEW_DEFAULT)).lower() == "true",
         "matrix_notify_changed": get_setting("matrix_notify_changed", str(MATRIX_NOTIFY_CHANGED_DEFAULT)).lower() == "true",
         "matrix_notify_daily": get_setting("matrix_notify_daily", str(MATRIX_NOTIFY_DAILY_DEFAULT)).lower() == "true",
+        "matrix_color_rules_json": get_setting("matrix_color_rules_json", ""),
     }
 
 def safe_accent() -> str:
@@ -974,6 +976,47 @@ def matrix_config() -> dict[str, Any]:
         "notify_daily": get_setting("matrix_notify_daily", str(MATRIX_NOTIFY_DAILY_DEFAULT)).lower() == "true",
     }
 
+DEFAULT_MATRIX_COLOR_RULES = [
+    {"keyword":"production", "label":"PRODUCTION", "color":"#dc3545", "emoji":"🔴", "enabled":True},
+    {"keyword":"preproduction", "label":"PRÉPRODUCTION", "color":"#e6a23c", "emoji":"🟠", "enabled":True},
+    {"keyword":"dev", "label":"DÉVELOPPEMENT", "color":"#339c6b", "emoji":"🟢", "enabled":True},
+]
+
+def matrix_color_rules() -> list[dict[str, Any]]:
+    raw = get_setting("matrix_color_rules_json", "")
+    try:
+        rules = json.loads(raw) if raw else DEFAULT_MATRIX_COLOR_RULES
+    except (ValueError, TypeError):
+        rules = DEFAULT_MATRIX_COLOR_RULES
+    if not isinstance(rules, list): return DEFAULT_MATRIX_COLOR_RULES
+    result = []
+    for rule in rules[:40]:
+        if not isinstance(rule, dict): continue
+        keyword = str(rule.get("keyword", "")).strip()[:80]
+        color = str(rule.get("color", "")).strip()
+        if not keyword or not re.fullmatch(r"#[0-9a-fA-F]{6}", color): continue
+        result.append({"keyword":keyword, "label":str(rule.get("label") or keyword).strip()[:80],
+                       "color":color, "emoji":str(rule.get("emoji") or "●")[:8],
+                       "enabled":bool(rule.get("enabled", True))})
+    return result
+
+def matrix_environment_style(environment: Any) -> dict[str, str] | None:
+    value = str(environment or "").strip().casefold()
+    if not value: return None
+    rules = [r for r in matrix_color_rules() if r["enabled"]]
+    # Exact matches first, then longest substring: 'preproduction' must not match 'production'.
+    for rule in rules:
+        if value == rule["keyword"].casefold(): return rule
+    for rule in sorted(rules, key=lambda r:len(r["keyword"]), reverse=True):
+        if rule["keyword"].casefold() in value: return rule
+    return None
+
+def matrix_environment_banner(environment: Any) -> tuple[str, str]:
+    rule = matrix_environment_style(environment)
+    if not rule: return "", ""
+    label = f'{rule["emoji"]} {rule["label"]}'
+    return label, f'<p><strong>{html.escape(label)}</strong></p>'
+
 def priority_matrix_style(issue: dict[str, Any]) -> tuple[str, str, str]:
     level = priority_level(issue)
     styles = {
@@ -1013,8 +1056,11 @@ def matrix_message(issue: dict[str, Any], kind: str, lang: str | None = None) ->
     links = f'🔗 <a href="{html.escape(redmine, quote=True)}">Redmine #{issue["id"]}</a>'
     if planner:
         links += f' &nbsp;·&nbsp; 🗓️ <a href="{html.escape(planner, quote=True)}">MEP Planner</a>'
+    env_label, env_banner = matrix_environment_banner(issue.get("environment"))
+    if env_label: plain = f"{env_label} | {plain}"
+    if env_label: color = matrix_environment_style(issue.get("environment"))["color"]
     formatted = f'''<div style="border-left:5px solid {color};padding:12px 16px;background:#111827;border-radius:8px">
-<div style="font-size:18px"><b>{icon} {html.escape(heading)}</b></div>
+{env_banner}<div style="font-size:18px"><b>{icon} {html.escape(heading)}</b></div>
 <div style="font-size:16px;margin-top:7px"><b>MEP #{issue['id']} — {html.escape(issue['subject'])}</b></div>
 <table style="margin-top:10px">{rows_html}</table>
 <div style="margin-top:12px">{links}</div>
@@ -1293,9 +1339,13 @@ def rollout_matrix_message(rollout: dict[str, Any], lang: str | None = None) -> 
     heading = tr("Nouveau déploiement Rollout Logger", "New Rollout Logger deployment", lang)
     project = rollout.get("project") or "—"; version = rollout.get("version") or "—"; environment = rollout.get("environment") or "—"
     plain = f"🚀 {heading} — {project} {version} | {environment} | {rollout.get('requester') or '—'} | {rollout.get('date') or '—'}"
+    env_label, env_banner = matrix_environment_banner(environment)
+    if env_label: plain = f"{env_label} | {plain}"
+    env_style = matrix_environment_style(environment)
+    border_color = env_style["color"] if env_style else "#2563eb"
     fields = [(tr("Projet","Project",lang),project),(tr("Environnement","Environment",lang),environment),(tr("Version","Version",lang),version),(tr("Demandeur","Requester",lang),rollout.get("requester") or "—"),(tr("Date","Date",lang),rollout.get("date") or "—")]
     rows = "".join(f'<tr><td style="padding:4px 14px 4px 0;color:#94a3b8">{html.escape(str(k))}</td><td style="padding:4px 0"><b>{html.escape(str(v))}</b></td></tr>' for k,v in fields)
-    formatted = f'<div style="border-left:5px solid #2563eb;padding:12px 16px;background:#111827;border-radius:8px"><div style="font-size:18px"><b>🚀 {html.escape(heading)}</b></div><table style="margin-top:10px">{rows}</table></div>'
+    formatted = f'<div style="border-left:5px solid {border_color};padding:12px 16px;background:#111827;border-radius:8px">{env_banner}<div style="font-size:18px"><b>🚀 {html.escape(heading)}</b></div><table style="margin-top:10px">{rows}</table></div>'
     return plain, formatted
 
 async def send_rollout_matrix(rollout: dict[str, Any]) -> str:
@@ -1620,6 +1670,14 @@ async def update_settings(payload: BrandingSettings, authorization: str | None =
     if accent and not re.fullmatch(r"#[0-9A-Fa-f]{6}",accent):
         raise HTTPException(400,"La couleur doit être au format #RRGGBB")
     values=payload.model_dump()
+    if values.get("matrix_color_rules_json"):
+        try:
+            parsed=json.loads(values["matrix_color_rules_json"])
+            if not isinstance(parsed,list) or len(parsed)>40: raise ValueError()
+            for rule in parsed:
+                if not isinstance(rule,dict) or not str(rule.get("keyword","")).strip() or not re.fullmatch(r"#[0-9a-fA-F]{6}",str(rule.get("color",""))): raise ValueError()
+        except (ValueError,TypeError):
+            raise HTTPException(400,"Règles de couleurs Matrix invalides")
     token = values.pop("matrix_access_token", "").strip()
     for key,value in values.items():
         if isinstance(value, bool):

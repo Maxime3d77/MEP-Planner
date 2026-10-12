@@ -6,7 +6,7 @@
 <meta content="width=device-width,initial-scale=1" name="viewport"/>
 <title>MEP Planner</title>
 <link href="/favicon.svg" rel="icon"/>
-<link href="/styles.css?v=5.3.9" rel="stylesheet"/>
+<link href="/styles.css?v=5.3.11" rel="stylesheet"/>
 </head>
 <body>
 <section class="login-screen" id="loginScreen">
@@ -127,6 +127,10 @@
 <label class="check"><input id="matrixNotifyDaily" type="checkbox"/><span id="matrixNotifyDailyLabel">Rappels quotidiens</span></label>
 </fieldset>
 </div>
+<fieldset class="notification-fieldset"><legend>Couleurs des notifications par environnement</legend>
+<p class="preview-hint">Les règles s'appliquent à Redmine et Rollout Logger. Correspondance exacte prioritaire, puis mot-clé contenu dans l'environnement.</p>
+<div id="matrixColorRules"></div><button class="secondary" id="matrixAddColorRule" type="button">＋ Ajouter une règle</button>
+</fieldset>
 <div class="connector-actions"><button class="secondary matrix-test" id="testMatrix" type="button">➤ Tester la connexion Matrix</button><span id="matrixTestResult"></span></div>
 <div class="matrix-preview"><small data-i18n="matrixPreview">Aperçu du message Matrix</small><div class="matrix-message priority-high"><strong>● <span data-i18n="highPriority">PRIORITÉ HAUTE</span></strong><h5><span>MEP #38744</span> — Upgrade Oracle Database</h5><p>▣ 12/06/2025 10:00 → 14:00　|　▤ PRODUCTION　|　♙ John Doe</p><div><a>🔗 <span data-i18n="viewRedmineTicket">Voir le ticket Redmine</span></a><a>◎ <span data-i18n="openInMep">Ouvrir dans MEP Planner</span></a></div></div><p class="preview-hint">ⓘ <span data-i18n="matrixPreviewHint">Le format HTML Matrix reprend automatiquement la couleur de priorité de la MEP.</span></p></div>
 </article>
@@ -332,6 +336,6 @@ Last name: sn</pre></details>
 <div class="dialog-actions"><button class="secondary" id="dialogCloseBottom">Fermer</button><a class="secondary" id="pdfLink" target="_blank">Voir le PDF</a><a id="d-link" rel="noopener" target="_blank">Ouvrir dans Redmine</a></div>
 </dialog>
 <dialog class="admin-dialog" id="adminDialog"><div class="dialog-head"><div><span id="adminEyebrow">ADMINISTRATION</span><h2 id="adminTitle">Accès aux paramètres</h2></div><button id="adminClose" type="button">✕</button></div><form class="admin-form" id="adminForm"><p id="adminHelp">Le mot de passe est défini par <code>ADMIN_PASSWORD</code> dans le fichier <code>.env</code>.</p><label><span id="adminPasswordLabel">Mot de passe administrateur</span><input autocomplete="current-password" autofocus="" id="adminPassword" required="" type="password"/></label><div id="adminResult"></div><div class="settings-actions"><button class="secondary" data-en="Cancel" data-fr="Annuler" id="adminCancel" type="button">Annuler</button><button class="primary-action compact" type="submit"><span class="send-icon">🔐</span><span><strong id="adminUnlockTitle">Déverrouiller</strong><small id="adminUnlockHint">Session temporaire</small></span></button></div></form></dialog>
-<script src="/app.js?v=5.3.9"></script>
+<script src="/app.js?v=5.3.11"></script>
 <dialog class="admin-dialog" id="userLoginDialog"><div class="dialog-head"><div><span data-en="SIGN IN" data-fr="CONNEXION">CONNEXION</span><h2 data-en="MEP Planner account" data-fr="Compte MEP Planner">Compte MEP Planner</h2></div><button id="userLoginClose" type="button">✕</button></div><form class="admin-form" id="userLoginForm"><label><span data-i18n="username">Identifiant</span><input autocomplete="username" id="loginUsername"/></label><label><span data-i18n="password">Mot de passe</span><input autocomplete="current-password" id="loginPassword" type="password"/></label><div id="loginResult"></div><div class="settings-actions" data-en="Sign in" data-fr="Se connecter"><button class="primary-action compact" data-en="Sign in" data-fr="Se connecter" type="submit">Se connecter</button></div></form></dialog></body>
 </html>
