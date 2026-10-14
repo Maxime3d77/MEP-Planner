@@ -35,7 +35,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-APP_VERSION = "5.3.11"
+APP_VERSION = "5.3.12"
 app = FastAPI(title="MEP Planner API", version=APP_VERSION)
 oidc_states: dict[str, dict[str, Any]] = {}
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -1017,6 +1017,13 @@ def matrix_environment_banner(environment: Any) -> tuple[str, str]:
     label = f'{rule["emoji"]} {rule["label"]}'
     return label, f'<p><strong>{html.escape(label)}</strong></p>'
 
+def matrix_environment_cell(environment: Any) -> str:
+    rule = matrix_environment_style(environment)
+    if not rule:
+        return html.escape(str(environment or "—"))
+    label = f'{rule["emoji"]} {rule["label"]}'
+    return f'<strong><font color="{rule["color"]}">{html.escape(label)}</font></strong>'
+
 def priority_matrix_style(issue: dict[str, Any]) -> tuple[str, str, str]:
     level = priority_level(issue)
     styles = {
@@ -1052,15 +1059,14 @@ def matrix_message(issue: dict[str, Any], kind: str, lang: str | None = None) ->
         (tr("Statut", "Status", lang), issue.get("status") or "—"),
         (tr("Assigné à", "Assigned to", lang), issue.get("assigned_to") or "—"),
     ]
-    rows_html = "".join(f'<tr><td style="padding:4px 14px 4px 0;color:#94a3b8">{html.escape(str(k))}</td><td style="padding:4px 0"><b>{html.escape(str(v))}</b></td></tr>' for k,v in rows)
+    rows_html = "".join(f'<tr><td style="padding:4px 14px 4px 0;color:#94a3b8">{html.escape(str(k))}</td><td style="padding:4px 0"><b>{matrix_environment_cell(v) if k == tr("Environnement", "Environment", lang) else html.escape(str(v))}</b></td></tr>' for k,v in rows)
     links = f'🔗 <a href="{html.escape(redmine, quote=True)}">Redmine #{issue["id"]}</a>'
     if planner:
         links += f' &nbsp;·&nbsp; 🗓️ <a href="{html.escape(planner, quote=True)}">MEP Planner</a>'
-    env_label, env_banner = matrix_environment_banner(issue.get("environment"))
-    if env_label: plain = f"{env_label} | {plain}"
-    if env_label: color = matrix_environment_style(issue.get("environment"))["color"]
+    env_style = matrix_environment_style(issue.get("environment"))
+    if env_style: color = env_style["color"]
     formatted = f'''<div style="border-left:5px solid {color};padding:12px 16px;background:#111827;border-radius:8px">
-{env_banner}<div style="font-size:18px"><b>{icon} {html.escape(heading)}</b></div>
+<div style="font-size:18px"><b>{icon} {html.escape(heading)}</b></div>
 <div style="font-size:16px;margin-top:7px"><b>MEP #{issue['id']} — {html.escape(issue['subject'])}</b></div>
 <table style="margin-top:10px">{rows_html}</table>
 <div style="margin-top:12px">{links}</div>
@@ -1339,13 +1345,11 @@ def rollout_matrix_message(rollout: dict[str, Any], lang: str | None = None) -> 
     heading = tr("Nouveau déploiement Rollout Logger", "New Rollout Logger deployment", lang)
     project = rollout.get("project") or "—"; version = rollout.get("version") or "—"; environment = rollout.get("environment") or "—"
     plain = f"🚀 {heading} — {project} {version} | {environment} | {rollout.get('requester') or '—'} | {rollout.get('date') or '—'}"
-    env_label, env_banner = matrix_environment_banner(environment)
-    if env_label: plain = f"{env_label} | {plain}"
     env_style = matrix_environment_style(environment)
     border_color = env_style["color"] if env_style else "#2563eb"
     fields = [(tr("Projet","Project",lang),project),(tr("Environnement","Environment",lang),environment),(tr("Version","Version",lang),version),(tr("Demandeur","Requester",lang),rollout.get("requester") or "—"),(tr("Date","Date",lang),rollout.get("date") or "—")]
-    rows = "".join(f'<tr><td style="padding:4px 14px 4px 0;color:#94a3b8">{html.escape(str(k))}</td><td style="padding:4px 0"><b>{html.escape(str(v))}</b></td></tr>' for k,v in fields)
-    formatted = f'<div style="border-left:5px solid {border_color};padding:12px 16px;background:#111827;border-radius:8px">{env_banner}<div style="font-size:18px"><b>🚀 {html.escape(heading)}</b></div><table style="margin-top:10px">{rows}</table></div>'
+    rows = "".join(f'<tr><td style="padding:4px 14px 4px 0;color:#94a3b8">{html.escape(str(k))}</td><td style="padding:4px 0"><b>{matrix_environment_cell(v) if k == tr("Environnement", "Environment", lang) else html.escape(str(v))}</b></td></tr>' for k,v in fields)
+    formatted = f'<div style="border-left:5px solid {border_color};padding:12px 16px;background:#111827;border-radius:8px"><div style="font-size:18px"><b>🚀 {html.escape(heading)}</b></div><table style="margin-top:10px">{rows}</table></div>'
     return plain, formatted
 
 async def send_rollout_matrix(rollout: dict[str, Any]) -> str:

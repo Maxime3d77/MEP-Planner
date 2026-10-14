@@ -1,4 +1,9 @@
-## v5.3.11
+## v5.3.12
+
+- Matrix : environnement coloré dans la cellule existante du tableau pour Rollout Logger et Redmine, selon les règles configurées.
+- Suppression du bandeau redondant au-dessus du titre.
+
+## v5.3.12
 - Règles dynamiques de mise en évidence Matrix par environnement (mot-clé, couleur, libellé, emoji, activation).
 - Appliquées aux notifications Redmine et Rollout Logger, avec priorité à la correspondance exacte et emoji de repli.
 - Validation serveur des règles et conservation des paramètres existants.
